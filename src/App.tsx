@@ -20,6 +20,7 @@ import {
   Plus,
   Compass,
   History,
+  Camera,
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -36,6 +37,7 @@ import { ForgeCopilotChat } from './components/ForgeCopilotChat';
 import { DescribeAndCreateModal } from './components/DescribeAndCreateModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { OnboardingTour } from './components/OnboardingTour';
+import { AIMockupGeneratorModal } from './components/AIMockupGeneratorModal';
 
 import {
   generateBinarySTL,
@@ -63,6 +65,8 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyTargetDesign, setHistoryTargetDesign] = useState<CADDesign | null>(null);
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isMockupModalOpen, setIsMockupModalOpen] = useState(false);
+  const [currentSnapshot, setCurrentSnapshot] = useState<string | null>(null);
 
   // Auto-launch onboarding tour for first-time visitors
   useEffect(() => {
@@ -517,6 +521,16 @@ export default function App() {
             <span className="hidden lg:inline">Etsy Listing</span>
           </button>
 
+          {/* AI Lifestyle Mockup Generator Button */}
+          <button
+            onClick={() => setIsMockupModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-semibold transition shadow-sm"
+            title="AI Lifestyle Mockup Studio for Etsy Listings"
+          >
+            <Camera className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden lg:inline">AI Mockups</span>
+          </button>
+
           {/* Onboarding Tour Button */}
           <button
             id="tour-nav-button"
@@ -674,6 +688,7 @@ export default function App() {
                 currentGeometryRef.current = geom;
               }}
               onSnapshot={(dataUrl) => {
+                setCurrentSnapshot(dataUrl);
                 // Save snapshot as thumbnail
                 saveToLibrary({
                   ...activeDesign,
@@ -899,6 +914,7 @@ export default function App() {
       {isEtsyListingOpen && (
         <EtsyListingModal
           design={activeDesign}
+          onOpenMockupStudio={() => setIsMockupModalOpen(true)}
           onUpdateDesignListing={(title, tags, price) => {
             const updated: CADDesign = {
               ...activeDesign,
@@ -912,6 +928,28 @@ export default function App() {
             saveToLibrary(updated);
           }}
           onClose={() => setIsEtsyListingOpen(false)}
+        />
+      )}
+
+      {/* AI Lifestyle Mockup Generator Modal */}
+      {isMockupModalOpen && activeDesign && (
+        <AIMockupGeneratorModal
+          design={activeDesign}
+          currentViewportSnapshot={currentSnapshot || activeDesign.thumbnailUrl}
+          onSaveMockupToDesign={(mockupUrl) => {
+            const updated: CADDesign = {
+              ...activeDesign,
+              thumbnailUrl: mockupUrl,
+              etsyDetails: {
+                ...activeDesign.etsyDetails,
+                mockupUrl,
+              },
+              updatedAt: new Date().toISOString(),
+            };
+            saveToLibrary(updated);
+          }}
+          onOpenEtsyListing={() => setIsEtsyListingOpen(true)}
+          onClose={() => setIsMockupModalOpen(false)}
         />
       )}
 

@@ -18,12 +18,14 @@ import { CADDesign } from '../types/cad';
 interface EtsyListingModalProps {
   design: CADDesign;
   onUpdateDesignListing: (title: string, tags: string[], price: number) => void;
+  onOpenMockupStudio?: () => void;
   onClose: () => void;
 }
 
 export const EtsyListingModal: React.FC<EtsyListingModalProps> = ({
   design,
   onUpdateDesignListing,
+  onOpenMockupStudio,
   onClose,
 }) => {
   const [listingTitle, setListingTitle] = useState(
@@ -108,8 +110,12 @@ export const EtsyListingModal: React.FC<EtsyListingModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          designName: design.name,
+          modelType: design.modelType,
+          dimensions: design.dimensions,
+          material: design.printSettings.material,
           prompt: mockupPrompt,
-          style: 'Commercial Etsy product photography, natural oak desk, bright morning sun, potted plant',
+          scenePreset: 'nordic_desk',
         }),
       });
       const data = await res.json();
@@ -204,22 +210,36 @@ export const EtsyListingModal: React.FC<EtsyListingModalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[10px] text-slate-400">
                   Generates styled studio scenes for Etsy cover photos
                 </span>
-                <button
-                  onClick={handleGenerateAiMockup}
-                  disabled={isGeneratingMockup}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition disabled:opacity-50"
-                >
-                  {isGeneratingMockup ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-3.5 h-3.5 text-orange-400" />
+                <div className="flex items-center gap-2">
+                  {onOpenMockupStudio && (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenMockupStudio();
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 transition"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Open Mockup Studio (All Presets)</span>
+                    </button>
                   )}
-                  <span>{isGeneratingMockup ? 'Rendering Photo...' : 'Generate Photo Mockup'}</span>
-                </button>
+                  <button
+                    onClick={handleGenerateAiMockup}
+                    disabled={isGeneratingMockup}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition disabled:opacity-50"
+                  >
+                    {isGeneratingMockup ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-3.5 h-3.5 text-orange-400" />
+                    )}
+                    <span>{isGeneratingMockup ? 'Rendering Photo...' : 'Quick Mockup'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

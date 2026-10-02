@@ -452,15 +452,96 @@ Return JSON:
 
 export async function handleGenerateMockup(req: Request, res: Response) {
   try {
-    const { prompt, style } = req.body || {};
-    const fullPrompt = `A photorealistic product photograph for an Etsy listing: ${prompt || 'a modern 3D printed geometric aesthetic home decor item'}. Style: ${style || 'scandinavian modern interior, warm natural sunlight, wooden table, potted monstera plant in soft focus background, editorial commercial product photography, 8k resolution, clean composition'}.`;
+    const {
+      prompt,
+      style,
+      designName = 'Geometric Modern Planter',
+      modelType = 'planter',
+      dimensions = { width: 85, depth: 85, height: 70 },
+      material = 'PLA',
+      scenePreset = 'nordic_desk',
+      lighting = 'golden_hour',
+      cameraAngle = 'hero_45',
+      canvasSnapshot,
+    } = req.body || {};
 
+    const sceneDescriptions: Record<string, { desc: string; bgColors: [string, string]; label: string }> = {
+      nordic_desk: {
+        desc: 'resting gracefully on a light natural Scandinavian oak desk beside a ceramic coffee mug and a miniature succulent, morning sun streaming through large sheer windows with soft ambient shadows, warm earthy minimalist interior, 8k commercial photography',
+        bgColors: ['#f8fafc', '#e2e8f0'],
+        label: 'Nordic Oak Workspace',
+      },
+      boho_living: {
+        desc: 'displayed on a floating reclaimed walnut wooden shelf in a sun-drenched bohemian living room, lush trailing pothos ivy vines, terracotta pottery, warm textured plaster wall, golden hour ambient lighting, cozy artisan atmosphere',
+        bgColors: ['#fef3c7', '#fed7aa'],
+        label: 'Sunlit Boho Living Room',
+      },
+      artisan_maker: {
+        desc: 'showcased in a maker craft design studio on an architect cutting mat, beside precision stainless steel calipers, brass wood carving tools, and an aesthetic background rack of pastel filament spools, crisp industrial studio lighting',
+        bgColors: ['#0f172a', '#1e293b'],
+        label: 'Artisan Maker Studio',
+      },
+      marble_spa: {
+        desc: 'resting on a clean polished white Carrara marble bathroom vanity countertop, gentle natural water reflections, soft eucalyptus sprigs in vase, luxury spa atmosphere, bright diffused daylight, architectural digest aesthetic',
+        bgColors: ['#f1f5f9', '#cbd5e1'],
+        label: 'Modern Marble Vanity',
+      },
+      unboxing_flatlay: {
+        desc: 'arranged in an artistic Etsy customer unboxing flatlay package with a textured kraft paper gift box, handwritten thank you card, natural jute twine ribbon, crinkle craft paper bedding, and dried lavender sprigs, top-down commercial flatlay',
+        bgColors: ['#fefce8', '#fef08a'],
+        label: 'Etsy Unboxing Flatlay',
+      },
+      custom: {
+        desc: style || 'clean minimalist studio product photography with natural lighting, sharp commercial focus',
+        bgColors: ['#f8fafc', '#e2e8f0'],
+        label: 'Custom Studio Scene',
+      },
+    };
+
+    const selectedScene = sceneDescriptions[scenePreset] || sceneDescriptions.nordic_desk;
+    const lightingMap: Record<string, string> = {
+      golden_hour: 'warm golden hour sunset lighting with long soft shadows and gentle honey highlights',
+      studio_softbox: 'professional 5600K dual softbox photography lighting with neutral clean shadows',
+      moody_ambient: 'moody ambient Scandinavian dusk lighting with warm tungsten lamp glow',
+      bright_daylight: 'crisp bright indirect natural daylight, vibrant colors and high clarity',
+    };
+    const selectedLighting = lightingMap[lighting] || lightingMap.golden_hour;
+
+    const angleMap: Record<string, string> = {
+      hero_45: '45-degree commercial hero perspective showing three-dimensional depth and top details',
+      eye_level: 'straight eye-level macro close-up showcasing smooth layer lines and surface quality',
+      top_down_flatlay: 'bird-eye 90-degree flatlay view arranged neatly with lifestyle accessories',
+    };
+    const selectedAngle = angleMap[cameraAngle] || angleMap.hero_45;
+
+    const fullPrompt = `Commercial product photograph for an Etsy listing: A high-end 3D printed / precision manufactured ${designName} (${dimensions.width}x${dimensions.height}mm, crafted in ${material}).
+Scene setting: ${selectedScene.desc}.
+Lighting: ${selectedLighting}.
+Angle: ${selectedAngle}.
+Product details: Watertight parametric finish, exquisite texture, editorial lifestyle photography, 8k resolution, photorealistic, ready for Etsy marketplace best seller banner. ${prompt ? `Additional notes: ${prompt}` : ''}`;
+
+    let imageUrl = '';
+
+    // Attempt Gemini Image Generation
     try {
+      const parts: any[] = [];
+      if (canvasSnapshot && typeof canvasSnapshot === 'string' && canvasSnapshot.startsWith('data:image/')) {
+        const mime = canvasSnapshot.split(';')[0].replace('data:', '');
+        const base64 = canvasSnapshot.split(',')[1];
+        if (base64) {
+          parts.push({
+            inlineData: {
+              mimeType: mime,
+              data: base64,
+            },
+          });
+        }
+      }
+      parts.push({ text: fullPrompt });
+
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-image',
-        contents: {
-          parts: [{ text: fullPrompt }],
-        },
+        contents: { parts },
         config: {
           imageConfig: {
             aspectRatio: '4:3',
@@ -469,7 +550,6 @@ export async function handleGenerateMockup(req: Request, res: Response) {
         },
       });
 
-      let imageUrl = '';
       if (response.candidates?.[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
           if (part.inlineData?.data) {
@@ -478,19 +558,146 @@ export async function handleGenerateMockup(req: Request, res: Response) {
           }
         }
       }
-
-      if (imageUrl) {
-        return res.json({ success: true, imageUrl });
-      }
     } catch (imgError: any) {
-      console.warn('Gemini image generation warning:', imgError.message);
+      console.warn('Gemini image generation warning, preparing procedural lifestyle composite:', imgError.message);
     }
 
-    // Graceful procedural fallback if image model unavailable or requires specific key
+    // If Gemini image model succeeded, return it immediately
+    if (imageUrl) {
+      return res.json({
+        success: true,
+        imageUrl,
+        promptUsed: fullPrompt,
+        sceneName: selectedScene.label,
+        isAiGenerated: true,
+      });
+    }
+
+    // High-Resolution Procedural Composite Fallback (SVG / Canvas Data URL)
+    // Ensures a gorgeous, instantly usable Etsy lifestyle mockup even if image quota is constrained
+    const cleanDesignName = designName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const cleanMaterial = material.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const sceneLabel = selectedScene.label;
+
+    // Generate high quality vector SVG lifestyle mockup
+    const svgMockup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+      <defs>
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${scenePreset === 'artisan_maker' ? '#0f172a' : scenePreset === 'boho_living' ? '#fdf4dc' : scenePreset === 'unboxing_flatlay' ? '#fefce8' : '#f8fafc'}" />
+          <stop offset="100%" stop-color="${scenePreset === 'artisan_maker' ? '#1e293b' : scenePreset === 'boho_living' ? '#fed7aa' : scenePreset === 'unboxing_flatlay' ? '#fed7aa' : '#e2e8f0'}" />
+        </linearGradient>
+        <linearGradient id="woodTable" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${scenePreset === 'artisan_maker' ? '#334155' : scenePreset === 'marble_spa' ? '#ffffff' : '#d4a373'}" />
+          <stop offset="100%" stop-color="${scenePreset === 'artisan_maker' ? '#1e293b' : scenePreset === 'marble_spa' ? '#e2e8f0' : '#bc6c25'}" />
+        </linearGradient>
+        <linearGradient id="sunBeam" x1="0%" y1="0%" x2="100%" y2="80%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45" />
+          <stop offset="100%" stop-color="#fef08a" stop-opacity="0.0" />
+        </linearGradient>
+        <filter id="softShadow" x="-20%" y="-20%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="25" stdDeviation="20" flood-color="#090d16" flood-opacity="0.38" />
+        </filter>
+        <filter id="glowBadge" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.18" />
+        </filter>
+      </defs>
+
+      <!-- Background Wall / Room Environment -->
+      <rect width="800" height="600" fill="url(#bgGrad)" />
+
+      <!-- Soft Sun Rays Streaming In -->
+      <polygon points="0,0 350,0 700,600 0,600" fill="url(#sunBeam)" opacity="0.75" />
+
+      <!-- Surface Tabletop / Shelf -->
+      <rect y="380" width="800" height="220" fill="url(#woodTable)" />
+      <!-- Table Edge Highlight -->
+      <line x1="0" y1="380" x2="800" y2="380" stroke="#ffffff" stroke-width="2" opacity="0.6" />
+
+      ${scenePreset === 'nordic_desk' ? `
+        <!-- Minimalist Ceramic Coffee Cup -->
+        <g transform="translate(620, 360)">
+          <ellipse cx="40" cy="80" rx="35" ry="10" fill="#000000" opacity="0.15" filter="url(#softShadow)" />
+          <rect x="15" y="10" width="50" height="70" rx="10" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+          <path d="M65,25 C80,25 80,55 65,55" fill="none" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" />
+          <ellipse cx="40" cy="12" rx="25" ry="8" fill="#582f0e" />
+        </g>
+        <!-- Succulent Leaves in soft focus -->
+        <g transform="translate(100, 320)" opacity="0.75">
+          <ellipse cx="40" cy="90" rx="35" ry="12" fill="#000000" opacity="0.15" />
+          <path d="M40,90 Q15,40 5,20 Q35,50 40,90" fill="#2d6a4f" />
+          <path d="M40,90 Q40,30 50,10 Q55,45 40,90" fill="#40916c" />
+          <path d="M40,90 Q70,40 85,25 Q55,55 40,90" fill="#52b788" />
+        </g>
+      ` : ''}
+
+      ${scenePreset === 'artisan_maker' ? `
+        <!-- Cutting Mat Grid Lines -->
+        <g stroke="#475569" stroke-width="1" opacity="0.4">
+          <line x1="0" y1="420" x2="800" y2="420" />
+          <line x1="0" y1="460" x2="800" y2="460" />
+          <line x1="0" y1="500" x2="800" y2="500" />
+          <line x1="0" y1="540" x2="800" y2="540" />
+          <line x1="0" y1="580" x2="800" y2="580" />
+          <line x1="100" y1="380" x2="100" y2="600" />
+          <line x1="200" y1="380" x2="200" y2="600" />
+          <line x1="300" y1="380" x2="300" y2="600" />
+          <line x1="400" y1="380" x2="400" y2="600" />
+          <line x1="500" y1="380" x2="500" y2="600" />
+          <line x1="600" y1="380" x2="600" y2="600" />
+          <line x1="700" y1="380" x2="700" y2="600" />
+        </g>
+        <!-- Caliper Tool Accent -->
+        <path d="M60,450 L200,410 L210,430 L70,470 Z" fill="#94a3b8" stroke="#cbd5e1" stroke-width="1.5" opacity="0.8" />
+      ` : ''}
+
+      <!-- Center Product Placement Stage with Shadow -->
+      <ellipse cx="400" cy="460" rx="190" ry="32" fill="#000000" opacity="0.32" filter="url(#softShadow)" />
+
+      ${canvasSnapshot ? `
+        <!-- Embedded 3D Canvas Snapshot with Realistic Scene Grading -->
+        <g transform="translate(190, 110)">
+          <image href="${canvasSnapshot}" x="0" y="0" width="420" height="340" preserveAspectRatio="xMidYMid meet" filter="url(#softShadow)" />
+        </g>
+      ` : `
+        <!-- High-Detail Geometric Parametric Silhouette Card -->
+        <g transform="translate(260, 160)" filter="url(#softShadow)">
+          <rect x="0" y="0" width="280" height="270" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" />
+          <circle cx="140" cy="115" r="75" fill="${modelType === 'coaster' ? '#f59e0b' : modelType === 'keychain' ? '#6366f1' : modelType === 'cutter' ? '#ec4899' : '#3b82f6'}" opacity="0.9" />
+          <path d="M95,145 L140,65 L185,145 Z" fill="#ffffff" opacity="0.3" />
+          <text x="140" y="215" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="#0f172a">${cleanDesignName}</text>
+          <text x="140" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="500" text-anchor="middle" fill="#64748b">${cleanMaterial} • ${dimensions.width}×${dimensions.height}mm</text>
+        </g>
+      `}
+
+      <!-- Etsy Best Seller Top-Left Badge -->
+      <g transform="translate(30, 30)" filter="url(#glowBadge)">
+        <rect x="0" y="0" width="180" height="34" rx="17" fill="#ffffff" fill-opacity="0.92" stroke="#e2e8f0" stroke-width="1.5" />
+        <circle cx="18" cy="17" r="7" fill="#f97316" />
+        <text x="35" y="22" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" fill="#0f172a">Etsy Listing Mockup</text>
+      </g>
+
+      <!-- Bottom Scene Preset Stamp & Dimensions -->
+      <g transform="translate(30, 545)" filter="url(#glowBadge)">
+        <rect x="0" y="0" width="260" height="30" rx="15" fill="#0f172a" fill-opacity="0.8" />
+        <text x="15" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#f8fafc">📍 ${sceneLabel} • 4:3 Ratio</text>
+      </g>
+
+      <!-- Bottom Right Verified Quality Tag -->
+      <g transform="translate(565, 545)" filter="url(#glowBadge)">
+        <rect x="0" y="0" width="205" height="30" rx="15" fill="#10b981" fill-opacity="0.9" />
+        <text x="15" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" fill="#ffffff">✓ 100% Watertight CAD Mesh</text>
+      </g>
+    </svg>`;
+
+    const fallbackDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgMockup)}`;
+
     res.json({
       success: true,
-      imageUrl: '',
-      fallbackNotice: 'Procedural render preview active',
+      imageUrl: fallbackDataUrl,
+      promptUsed: fullPrompt,
+      sceneName: selectedScene.label,
+      isAiGenerated: false,
+      fallbackNotice: 'Procedural studio lighting composite generated successfully.',
     });
   } catch (error: any) {
     console.error('Mockup generation error:', error);

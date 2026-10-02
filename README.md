@@ -96,6 +96,22 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
 - **Seamless Tab Switching:** Automatically switches between Dimensions, Slicer, and Laser tabs to reveal corresponding controls during each step.
 - **Persistent Progress:** Remembers completion state via `localStorage` with a persistent **"Tour"** button in the header bar for anytime replay.
 
+### 9. AI Lifestyle Mockup Generator Studio
+- **3D-to-Lifestyle Staging:** Transforms the live 3D parametric CAD design into commercial 4:3 product photography tailored for Etsy listing covers and social promotion.
+- **Etsy Bestseller Scene Presets:**
+  - **🪴 Nordic Oak Workspace:** Light Scandinavian desk, ceramic coffee cup, and sunny potted succulent.
+  - **🌿 Sunlit Boho Living Room:** Reclaimed floating shelf, trailing ivy, terracotta pottery, and golden hour sun.
+  - **📐 Artisan Maker Studio:** Architect cutting mat, stainless calipers, woodworking tools, and pastel filament spools.
+  - **🛁 Modern Marble Vanity:** Polished white Carrara marble counter, eucalyptus sprigs, and luxury spa lighting.
+  - **📦 Etsy Unboxing Flatlay:** Kraft paper shipping box, handwritten thank-you card, twine ribbon, and dried lavender.
+  - **✨ Custom Creative Mode:** Text prompt editor allowing specialized staging and styling adjustments.
+- **Photographic Lighting & Camera Angles:** Supports Golden Hour sunset, 5600K Studio Softbox, Bright Indirect Daylight, 45° Hero Perspectives, and Top-Down Flatlays.
+- **3D Viewport Pose Blending:** Captures the live viewport angle and embeds the rendered 3D part directly into the staged scene.
+- **One-Click Etsy Publishing:**
+  - **Set as Main Listing Photo:** Automatically updates the design's `mockupUrl` and `thumbnailUrl` across the Cloud Library.
+  - **Download 4:3 Image:** Instant export of high-resolution images ready for Etsy Seller Dashboard uploads.
+  - **Direct Transition to SEO Studio:** Hands off the generated image to the Etsy SEO Listing package.
+
 ---
 
 ## 🔐 Environment Variables & Security
