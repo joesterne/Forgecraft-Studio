@@ -1,0 +1,6 @@
+{
+  "name": "ForgeCraft Studio - AI 3D Print & Laser CAD for Etsy Creators",
+  "description": "Generate parametric .STL 3D print models and precision vector files for Etsy sellers. Features customizable dimensions, slicing optimization, laser engraving, cloud library, and on-demand print API integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
