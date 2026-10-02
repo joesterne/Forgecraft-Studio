@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Printer,
   DollarSign,
@@ -17,6 +17,16 @@ import {
   BarChart3,
   Zap,
   ShoppingBag,
+  AlertTriangle,
+  ShieldAlert,
+  ShieldCheck,
+  Wrench,
+  X,
+  AlertCircle,
+  RefreshCw,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,23 +38,57 @@ import {
   Cell,
   CartesianGrid,
 } from 'recharts';
-import { CADDesign, MaterialType, InfillPattern, PrintSettings } from '../types/cad';
+import { CADDesign, MaterialType, InfillPattern, PrintSettings, ModelDimensions } from '../types/cad';
 import { calculatePrintStats } from '../utils/stlExporter';
+import { analyzePrintability, PrintabilityReport, PrintabilityIssue } from '../utils/printabilityChecker';
 
 interface PrintOptimizerProps {
   design: CADDesign;
   onChangePrintSettings: (newSettings: Partial<PrintSettings>) => void;
+  onChangeDimensions?: (newDims: Partial<ModelDimensions>) => void;
 }
 
 export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   design,
   onChangePrintSettings,
+  onChangeDimensions,
 }) => {
   const p = design.printSettings;
   const stats = calculatePrintStats(design.dimensions, design.printSettings);
 
   const [showFormulaDetails, setShowFormulaDetails] = useState(false);
   const [batchQuantity, setBatchQuantity] = useState<number>(1);
+  const [isToastDismissed, setIsToastDismissed] = useState(false);
+  const [isRechecking, setIsRechecking] = useState(false);
+  const [showAllIssues, setShowAllIssues] = useState(false);
+
+  // Run real-time physical printability check
+  const printability: PrintabilityReport = useMemo(() => {
+    return analyzePrintability(design);
+  }, [design.dimensions, design.modelType, design.printSettings]);
+
+  // Re-open toast if a new warning arises
+  const issueKey = printability.issues.map((i) => i.id).join(',');
+  useEffect(() => {
+    setIsToastDismissed(false);
+  }, [issueKey]);
+
+  const handleManualRecheck = () => {
+    setIsRechecking(true);
+    setTimeout(() => {
+      setIsRechecking(false);
+      setIsToastDismissed(false);
+    }, 450);
+  };
+
+  const handleAutoFix = (issue: PrintabilityIssue) => {
+    if (issue.suggestedPrintSettings) {
+      onChangePrintSettings(issue.suggestedPrintSettings);
+    }
+    if (issue.suggestedDimensions && onChangeDimensions) {
+      onChangeDimensions(issue.suggestedDimensions);
+    }
+  };
 
   const materials: { id: MaterialType; name: string; desc: string; density: number; temp: string; color: string }[] = [
     { id: 'PLA', name: 'PLA / PLA Pro', desc: 'Easy, sharp detail, eco-friendly', density: 1.24, temp: '210°C / 60°C', color: 'text-blue-400' },
@@ -73,7 +117,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
     {
       category: 'Material Usage',
       cost: Number((stats.materialCost * qty).toFixed(2)),
-      description: `${(stats.weightGrams * qty).toFixed(1)}g ${p.material} filament`,
+      description: `${(stats.weightGrams * qty).toFixed(1)}g ${p.material} at $${p.filamentCostPerKg}/kg`,
       color: '#3b82f6',
       percentage: Number(((stats.materialCost / (stats.recommendedRetailPrice || 1)) * 100).toFixed(1)),
     },
@@ -128,8 +172,99 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
     return null;
   };
 
+  const primaryIssue = printability.issues[0];
+
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-6">
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
+      {/* WARNING TOAST NOTIFICATION: STRUCTURAL / OVERHANG ISSUES */}
+      {printability.issues.length > 0 && !isToastDismissed && primaryIssue && (
+        <div
+          className={`p-3.5 rounded-2xl border shadow-2xl transition-all duration-300 flex flex-col gap-2.5 animate-fadeIn ${
+            primaryIssue.severity === 'critical'
+              ? 'bg-rose-950/90 border-rose-500/80 text-rose-100 shadow-rose-950/50'
+              : 'bg-amber-950/90 border-amber-500/80 text-amber-100 shadow-amber-950/50'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div
+                className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                  primaryIssue.severity === 'critical'
+                    ? 'bg-rose-900/60 text-rose-300 border border-rose-500/60 animate-pulse'
+                    : 'bg-amber-900/60 text-amber-300 border border-amber-500/60 animate-pulse'
+                }`}
+              >
+                {primaryIssue.severity === 'critical' ? (
+                  <ShieldAlert className="w-4 h-4" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4" />
+                )}
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                      primaryIssue.severity === 'critical'
+                        ? 'bg-rose-500 text-slate-950'
+                        : 'bg-amber-500 text-slate-950'
+                    }`}
+                  >
+                    Printability Warning
+                  </span>
+                  <span className="text-xs font-bold text-white">
+                    {primaryIssue.title}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 leading-relaxed">
+                  {primaryIssue.message}
+                </p>
+                <p className="text-[11px] text-slate-300/90 font-medium">
+                  💡 {primaryIssue.recommendation}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsToastDismissed(true)}
+              className="p-1 rounded-lg hover:bg-black/30 text-slate-400 hover:text-white transition shrink-0"
+              title="Dismiss warning notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quick Auto-Fix Action Bar in Toast */}
+          <div className="flex items-center justify-between pt-1 border-t border-white/10 text-xs">
+            <span className="text-[11px] text-slate-300 font-mono">
+              Score: <strong className="text-white">{printability.score}/100</strong> ({printability.issues.length} issue{printability.issues.length > 1 ? 's' : ''})
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAllIssues(!showAllIssues)}
+                className="text-[11px] text-slate-300 hover:text-white underline underline-offset-2"
+              >
+                {showAllIssues ? 'Collapse Diagnostics' : 'Inspect All Checks'}
+              </button>
+
+              {primaryIssue.autoFixLabel && (
+                <button
+                  onClick={() => handleAutoFix(primaryIssue)}
+                  className={`px-3 py-1 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 ${
+                    primaryIssue.severity === 'critical'
+                      ? 'bg-white text-rose-950 hover:bg-rose-100'
+                      : 'bg-amber-400 text-amber-950 hover:bg-amber-300'
+                  }`}
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>{primaryIssue.autoFixLabel}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -146,6 +281,196 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
           <TrendingUp className="w-3 h-3" />
           {stats.profitMargin}% Etsy Margin
         </span>
+      </div>
+
+      {/* PRINTABILITY & STRUCTURAL PRE-FLIGHT CHECK */}
+      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 shadow-md space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`p-2 rounded-xl border ${
+                printability.status === 'passed'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : printability.status === 'warning'
+                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                  : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+              }`}
+            >
+              {printability.status === 'passed' ? (
+                <ShieldCheck className="w-4 h-4" />
+              ) : (
+                <ShieldAlert className="w-4 h-4" />
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-100">Printability Pre-Flight Check</h4>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    printability.status === 'passed'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                      : printability.status === 'warning'
+                      ? 'bg-amber-950 text-amber-300 border-amber-800'
+                      : 'bg-rose-950 text-rose-300 border-rose-800'
+                  }`}
+                >
+                  {printability.status === 'passed'
+                    ? '100% Slicer Ready'
+                    : `${printability.score}/100 - Issues Detected`}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {printability.summary}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleManualRecheck}
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition"
+            title="Re-run structural and overhang geometry analysis"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRechecking ? 'animate-spin text-blue-400' : ''}`} />
+            <span>Scan</span>
+          </button>
+        </div>
+
+        {/* Structural Metrics Radar Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80">
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 block font-medium">Wall Thickness</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-xs font-bold font-mono text-slate-100">
+                {printability.metrics.wallThicknessMm} mm
+              </span>
+              <span
+                className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
+                  printability.metrics.wallThicknessMm >= 1.2
+                    ? 'text-emerald-400 bg-emerald-950/60'
+                    : 'text-amber-400 bg-amber-950/60'
+                }`}
+              >
+                {printability.metrics.wallThicknessMm >= 1.2 ? 'Safe' : 'Thin'}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 block font-medium">Max Overhang</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-xs font-bold font-mono text-slate-100">
+                {printability.metrics.maxOverhangAngleDeg}°
+              </span>
+              <span
+                className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
+                  printability.metrics.maxOverhangAngleDeg <= 45
+                    ? 'text-emerald-400 bg-emerald-950/60'
+                    : 'text-rose-400 bg-rose-950/60'
+                }`}
+              >
+                {printability.metrics.maxOverhangAngleDeg <= 45 ? '≤45° Safe' : '>45° Steep'}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 block font-medium">Slicer Supports</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-xs font-bold font-mono text-slate-100">
+                {p.supportsNeeded ? 'Enabled' : 'Disabled'}
+              </span>
+              <button
+                onClick={() => onChangePrintSettings({ supportsNeeded: !p.supportsNeeded })}
+                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition ${
+                  p.supportsNeeded
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {p.supportsNeeded ? 'ON' : 'OFF'}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 block font-medium">Aspect Ratio</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-xs font-bold font-mono text-slate-100">
+                {printability.metrics.aspectRatio}:1
+              </span>
+              <span
+                className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
+                  printability.metrics.aspectRatio < 2.5
+                    ? 'text-emerald-400 bg-emerald-950/60'
+                    : 'text-amber-400 bg-amber-950/60'
+                }`}
+              >
+                {printability.metrics.aspectRatio < 2.5 ? 'Stable' : 'Slender'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Issues Accordion */}
+        {printability.issues.length > 0 && (
+          <div className="pt-2 border-t border-slate-800/80 space-y-2">
+            <button
+              onClick={() => setShowAllIssues(!showAllIssues)}
+              className="w-full flex items-center justify-between text-xs text-slate-300 hover:text-white py-1 transition"
+            >
+              <span className="flex items-center gap-1.5 font-semibold text-[11px]">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Detected Structural Findings ({printability.issues.length})</span>
+              </span>
+              {showAllIssues ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {showAllIssues && (
+              <div className="space-y-2 pt-1 animate-fadeIn">
+                {printability.issues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            issue.severity === 'critical'
+                              ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                              : issue.severity === 'warning'
+                              ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                              : 'bg-blue-950 text-blue-300 border border-blue-800'
+                          }`}
+                        >
+                          {issue.severity}
+                        </span>
+                        <span className="font-bold text-slate-100">{issue.title}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        {issue.message}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        Recommendation: {issue.recommendation}
+                      </p>
+                    </div>
+
+                    {issue.autoFixLabel && (
+                      <button
+                        onClick={() => handleAutoFix(issue)}
+                        className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 self-start sm:self-auto"
+                      >
+                        <Wrench className="w-3 h-3" />
+                        <span>{issue.autoFixLabel}</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* DEDICATED MATERIAL WEIGHT ESTIMATOR */}
@@ -178,91 +503,89 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
         </div>
 
         {/* Primary Weight Card */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-950/70 rounded-xl border border-slate-800/80">
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Weight className="w-3 h-3 text-indigo-400" /> Estimated Weight
-            </span>
-            <p className="text-xl font-black text-indigo-300 font-mono tracking-tight">
-              {stats.weightGrams} <span className="text-xs font-normal text-slate-400">grams</span>
-            </p>
-            <span className="text-[10px] text-slate-500">
-              Vol: {stats.volumeCm3} cm³
-            </span>
-          </div>
-
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Layers className="w-3 h-3 text-slate-400" /> Infill Fraction
-            </span>
-            <p className="text-lg font-bold text-slate-200 font-mono">
-              {p.infillDensity}% <span className="text-xs text-slate-400 font-normal">({p.infillPattern})</span>
-            </p>
-            <span className="text-[10px] text-slate-500">
-              Core: {stats.infillVolumeCm3} cm³
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3.5 bg-slate-900/90 rounded-xl border border-indigo-500/40 relative overflow-hidden">
+            <span className="text-[11px] text-slate-400 block font-medium">Estimated Part Weight</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">
+                {currentWeight}
+              </span>
+              <span className="text-xs text-indigo-400 font-mono font-bold">grams</span>
+            </div>
+            <span className="text-[10px] text-slate-400 block mt-1">
+              Total volume: {stats.volumeCm3} cm³
             </span>
           </div>
 
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Package className="w-3 h-3 text-emerald-400" /> 1kg Spool Yield
-            </span>
-            <p className="text-lg font-bold text-emerald-300 font-mono">
-              ~{stats.partsPerSpool} <span className="text-xs text-slate-400 font-normal">units</span>
-            </p>
-            <span className="text-[10px] text-slate-500">
-              Per 1000g spool
+          <div className="p-3.5 bg-slate-900/70 rounded-xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 block font-medium">Solid Perimeter Shell</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-xl font-bold text-slate-200 font-mono">
+                {Number((stats.solidShellVolumeCm3 * stats.density).toFixed(1))}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">grams</span>
+            </div>
+            <span className="text-[10px] text-slate-400 block mt-1">
+              {stats.solidShellVolumeCm3} cm³ ({p.wallCount} perimeter loops)
             </span>
           </div>
 
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <DollarSign className="w-3 h-3 text-amber-400" /> Material Cost
-            </span>
-            <p className="text-lg font-bold text-amber-300 font-mono">
-              ${stats.materialCost}
-            </p>
-            <span className="text-[10px] text-slate-500">
-              @ ${p.filamentCostPerKg || 20}/kg
+          <div className="p-3.5 bg-slate-900/70 rounded-xl border border-slate-800">
+            <span className="text-[11px] text-slate-400 block font-medium">Internal Infill</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-xl font-bold text-slate-200 font-mono">
+                {Number((stats.infillVolumeCm3 * stats.density).toFixed(1))}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">grams</span>
+            </div>
+            <span className="text-[10px] text-slate-400 block mt-1">
+              {stats.infillVolumeCm3} cm³ ({p.infillDensity}% {p.infillPattern})
             </span>
           </div>
         </div>
 
-        {/* Material Density Weight Comparison Grid */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
-            <span>Material Density & Weight Comparison:</span>
-            <span className="text-[10px] text-slate-400 font-mono">Total Volume: {stats.volumeCm3} cm³</span>
+        {/* Material Density Benchmark Comparison Table */}
+        <div className="space-y-1.5 pt-1">
+          <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
+            <span>Material Density Comparison</span>
+            <span className="text-[10px] text-indigo-400 font-mono">Click to Switch Active Material</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
             {materials.map((mat) => {
-              const matWeight = stats.materialWeights?.[mat.id] || Number((stats.volumeCm3 * mat.density).toFixed(1));
+              const weightForMat = stats.materialWeights[mat.id as keyof typeof stats.materialWeights];
               const isSelected = p.material === mat.id;
-              const diffPercent = (((matWeight - currentWeight) / currentWeight) * 100).toFixed(1);
-              const isDiffZero = Math.abs(Number(diffPercent)) < 0.2;
+              const plaWeight = stats.materialWeights.PLA;
+              const diffPercent = (((weightForMat - plaWeight) / plaWeight) * 100).toFixed(1);
+              const isDiffZero = Math.abs(Number(diffPercent)) < 0.1;
 
               return (
                 <button
                   key={mat.id}
                   onClick={() => onChangePrintSettings({ material: mat.id })}
-                  className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                  className={`p-2.5 rounded-xl text-left border transition relative ${
                     isSelected
-                      ? 'bg-indigo-600/20 border-indigo-500/80 text-indigo-100 shadow-md ring-1 ring-indigo-500/40'
-                      : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-850'
+                      ? 'bg-indigo-600/20 border-indigo-400 ring-1 ring-indigo-400/50'
+                      : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200">{mat.name}</span>
-                    <span className="text-[10px] font-mono text-slate-400">{mat.density} g/cm³</span>
+                    <span className={`text-xs font-bold ${mat.color}`}>
+                      {mat.id}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {mat.density}g/cm³
+                    </span>
                   </div>
 
-                  <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-sm font-bold font-mono text-slate-100">
-                      {matWeight}g
-                    </span>
+                  <div className="text-sm font-black font-mono text-slate-100 mt-1">
+                    {weightForMat}g
+                  </div>
+
+                  <div className="flex items-center justify-between text-[9px] mt-1 text-slate-400">
+                    <span>vs PLA:</span>
                     <span
-                      className={`text-[10px] font-mono font-medium ${
+                      className={`font-mono font-medium ${
                         isSelected
                           ? 'text-indigo-300'
                           : Number(diffPercent) > 0
@@ -395,7 +718,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
 
         {/* Summary Metric Badges under Chart */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80">
-          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 transition-all duration-300">
             <span className="text-[10px] text-blue-400 flex items-center gap-1 font-medium">
               <Weight className="w-3 h-3" /> Raw Material
             </span>
@@ -407,7 +730,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
             </span>
           </div>
 
-          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 transition-all duration-300">
             <span className="text-[10px] text-amber-400 flex items-center gap-1 font-medium">
               <Zap className="w-3 h-3" /> Energy Cost
             </span>
@@ -419,7 +742,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
             </span>
           </div>
 
-          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 transition-all duration-300">
             <span className="text-[10px] text-pink-400 flex items-center gap-1 font-medium">
               <ShoppingBag className="w-3 h-3" /> Platform & Fees
             </span>
@@ -431,7 +754,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
             </span>
           </div>
 
-          <div className="p-2 bg-slate-900/60 rounded-xl border border-emerald-900/40 bg-emerald-950/10">
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-emerald-900/40 bg-emerald-950/10 transition-all duration-300">
             <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
               <TrendingUp className="w-3 h-3" /> Net Profit
             </span>
@@ -558,13 +881,13 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
         </div>
       </div>
 
-      {/* Wall Loops & Top/Bottom Shells */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800">
+      {/* Wall Loops, Slicer Supports & Filament Cost */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800">
         <div>
           <label className="block text-xs text-slate-300 font-medium mb-1">
             Wall Perimeters (Shells)
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {[2, 3, 4, 5].map((w) => (
               <button
                 key={w}
@@ -583,7 +906,28 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
 
         <div>
           <label className="block text-xs text-slate-300 font-medium mb-1">
-            Filament Spool Cost ($/kg)
+            Slicer Supports
+          </label>
+          <button
+            onClick={() => onChangePrintSettings({ supportsNeeded: !p.supportsNeeded })}
+            className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-between transition border ${
+              p.supportsNeeded
+                ? 'bg-blue-600/20 border-blue-500 text-blue-200'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>{p.supportsNeeded ? 'Supports Enabled' : 'No Supports'}</span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                p.supportsNeeded ? 'bg-blue-400 animate-pulse' : 'bg-slate-600'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-xs text-slate-300 font-medium mb-1">
+            Spool Cost ($/kg)
           </label>
           <div className="relative">
             <span className="absolute left-2.5 top-1.5 text-xs text-slate-500">$</span>

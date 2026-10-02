@@ -35,6 +35,7 @@ import { EtsyListingModal } from './components/EtsyListingModal';
 import { ForgeCopilotChat } from './components/ForgeCopilotChat';
 import { DescribeAndCreateModal } from './components/DescribeAndCreateModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { OnboardingTour } from './components/OnboardingTour';
 
 import {
   generateBinarySTL,
@@ -61,6 +62,18 @@ export default function App() {
   const [isDescribeModalOpen, setIsDescribeModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyTargetDesign, setHistoryTargetDesign] = useState<CADDesign | null>(null);
+  const [isTourOpen, setIsTourOpen] = useState(false);
+
+  // Auto-launch onboarding tour for first-time visitors
+  useEffect(() => {
+    const hasCompletedTour = localStorage.getItem('forgecraft_tour_completed');
+    if (!hasCompletedTour) {
+      const timer = setTimeout(() => {
+        setIsTourOpen(true);
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // AI Prompt Bar State
   const [aiIdeaPrompt, setAiIdeaPrompt] = useState('');
@@ -504,8 +517,19 @@ export default function App() {
             <span className="hidden lg:inline">Etsy Listing</span>
           </button>
 
+          {/* Onboarding Tour Button */}
+          <button
+            id="tour-nav-button"
+            onClick={() => setIsTourOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition shadow-sm"
+            title="Interactive Onboarding Tour (Dimensions, Slicer, Laser)"
+          >
+            <Compass className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">Tour</span>
+          </button>
+
           {/* Export Dropdown */}
-          <div className="relative">
+          <div id="tour-export-button" className="relative">
             <button
               onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg transition"
@@ -642,9 +666,10 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex-1 min-h-[480px] lg:min-h-[580px] w-full">
+          <div id="tour-viewport" className="flex-1 min-h-[480px] lg:min-h-[580px] w-full">
             <Viewport3D
               design={activeDesign}
+              activeTab={activeTab}
               onGeometryReady={(geom) => {
                 currentGeometryRef.current = geom;
               }}
@@ -711,6 +736,7 @@ export default function App() {
           {/* Workbench Tabs */}
           <div className="flex items-center bg-slate-900/90 border border-slate-800 p-1 rounded-2xl">
             <button
+              id="tour-tab-dimensions"
               onClick={() => setActiveTab('dimensions')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'dimensions'
@@ -723,6 +749,7 @@ export default function App() {
             </button>
 
             <button
+              id="tour-tab-slicer"
               onClick={() => setActiveTab('slicer')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'slicer'
@@ -735,6 +762,7 @@ export default function App() {
             </button>
 
             <button
+              id="tour-tab-laser"
               onClick={() => setActiveTab('laser')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'laser'
@@ -760,6 +788,7 @@ export default function App() {
               <PrintOptimizer
                 design={activeDesign}
                 onChangePrintSettings={handlePrintSettingsChange}
+                onChangeDimensions={handleDimensionsChange}
               />
             )}
 
@@ -885,6 +914,13 @@ export default function App() {
           onClose={() => setIsEtsyListingOpen(false)}
         />
       )}
+
+      {/* Onboarding Tour Step-by-Step Tooltip Overlay */}
+      <OnboardingTour
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        onTabChange={(tab) => setActiveTab(tab)}
+      />
     </div>
   );
 }

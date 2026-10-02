@@ -10,20 +10,30 @@ import {
   Sparkles,
   AlertTriangle,
   Compass,
+  Download,
+  CheckCircle2,
+  Printer,
+  Flame,
+  ArrowDownToLine,
 } from 'lucide-react';
 import { CADDesign } from '../types/cad';
 import { buildParametricGeometry } from '../utils/geometryGenerators';
+import { generateBinarySTL, generateLaserSVG, downloadFile } from '../utils/stlExporter';
 
 interface Viewport3DProps {
   design: CADDesign;
+  activeTab?: 'dimensions' | 'slicer' | 'laser';
   onGeometryReady?: (geometry: THREE.BufferGeometry) => void;
   onSnapshot?: (dataUrl: string) => void;
+  onQuickExport?: (format: 'stl' | 'svg') => void;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
   design,
+  activeTab = 'dimensions',
   onGeometryReady,
   onSnapshot,
+  onQuickExport,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,6 +45,44 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const [isAutoRotate, setIsAutoRotate] = useState<boolean>(false);
   const [showBoundingBox, setShowBoundingBox] = useState<boolean>(true);
   const [hasOverhangs, setHasOverhangs] = useState<boolean>(false);
+
+  // Quick Export State
+  const [quickExportSuccess, setQuickExportSuccess] = useState<boolean>(false);
+  const [isQuickExporting, setIsQuickExporting] = useState<boolean>(false);
+
+  const isLaserActive = activeTab === 'laser';
+  const exportFormatLabel = isLaserActive ? '.SVG' : '.STL';
+  const exportDestinationLabel = isLaserActive ? 'Laser Cut & Engrave' : '3D Print Ready';
+
+  const handleQuickExport = () => {
+    if (onQuickExport) {
+      onQuickExport(isLaserActive ? 'svg' : 'stl');
+      setQuickExportSuccess(true);
+      setTimeout(() => setQuickExportSuccess(false), 2200);
+      return;
+    }
+
+    setIsQuickExporting(true);
+    try {
+      const cleanName = design.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      if (isLaserActive) {
+        const svgContent = generateLaserSVG(design);
+        const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+        downloadFile(blob, `${cleanName}_laser.svg`);
+      } else {
+        const geom = currentGeometryRef.current || buildParametricGeometry(design.modelType, design.dimensions);
+        const bytes = generateBinarySTL(geom);
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'model/stl' });
+        downloadFile(blob, `${cleanName}.stl`);
+      }
+      setQuickExportSuccess(true);
+      setTimeout(() => setQuickExportSuccess(false), 2200);
+    } catch (err) {
+      console.error('Quick export failed:', err);
+    } finally {
+      setIsQuickExporting(false);
+    }
+  };
 
   // Three.js internal references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -395,6 +443,55 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           title="Take High-Res Product Shot"
         >
           <Camera className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Floating Quick Export Action Button (Adaptive to Active Tab) */}
+      <div className="absolute top-16 right-4 z-20 pointer-events-auto">
+        <button
+          id="tour-quick-export-button"
+          onClick={handleQuickExport}
+          disabled={isQuickExporting}
+          className={`group flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-2xl font-bold text-xs transition-all duration-300 transform active:scale-95 border cursor-pointer ${
+            quickExportSuccess
+              ? 'bg-emerald-600 border-emerald-400 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/50'
+              : isLaserActive
+              ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white border-rose-400/50 shadow-rose-950/50 hover:shadow-rose-900/40'
+              : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white border-blue-400/50 shadow-blue-950/50 hover:shadow-blue-900/40'
+          }`}
+          title={`Click to one-click download ${exportFormatLabel} for the active ${activeTab} workspace`}
+        >
+          {quickExportSuccess ? (
+            <>
+              <CheckCircle2 className="w-4 h-4 text-emerald-200 animate-bounce" />
+              <div className="flex flex-col text-left leading-tight">
+                <span className="font-extrabold text-white">Downloaded {exportFormatLabel}!</span>
+                <span className="text-[9px] text-emerald-100 font-normal">File saved to downloads</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="p-1 rounded-lg bg-black/20 group-hover:bg-black/30 transition">
+                {isLaserActive ? (
+                  <Flame className="w-4 h-4 text-amber-200 shrink-0" />
+                ) : (
+                  <Printer className="w-4 h-4 text-cyan-200 shrink-0" />
+                )}
+              </div>
+              <div className="flex flex-col text-left leading-tight">
+                <span className="font-extrabold flex items-center gap-1.5 tracking-wide">
+                  <span>Quick Export</span>
+                  <span className="font-mono bg-black/30 px-1.5 py-0.2 rounded text-[10px] text-white/95 border border-white/20">
+                    {exportFormatLabel}
+                  </span>
+                </span>
+                <span className="text-[9px] text-white/80 font-medium">
+                  {exportDestinationLabel}
+                </span>
+              </div>
+              <ArrowDownToLine className="w-3.5 h-3.5 ml-1 opacity-80 group-hover:translate-y-0.5 transition-transform" />
+            </>
+          )}
         </button>
       </div>
 

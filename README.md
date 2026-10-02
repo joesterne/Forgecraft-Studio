@@ -16,6 +16,10 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
   - **Gridfinity Desk Organizers:** Stacking lips, interior compartment dividers, and smooth scooping corners.
   - **Sculptural Vases:** Procedural lofted and fluted geometric home decor.
 - **Export Standards:** Direct download of official binary `.STL` (compact and compatible with Bambu Studio, PrusaSlicer, Cura, OrcaSlicer, Lychee) and ASCII text `.STL`.
+- **Viewport Hovering 'Quick Export' Button:** A floating one-click action button on the 3D canvas that dynamically adapts to the current workbench:
+  - **Slicer / Dimensions Workspace:** Triggers an instant one-click download of binary `.STL` (Bambu Studio & Prusa ready).
+  - **Laser & Vector Workspace:** Triggers an instant one-click download of layered `.SVG` (LightBurn, Glowforge, and xTool ready).
+  - Provides active visual confirmation (`Downloaded! ✓`) without needing to navigate dropdown menus.
 
 ### 2. "Describe a Design & Create It" (Voice & Text CAD)
 - **Natural Language Input:** Type or speak any product idea (e.g. *"A modern 8-sided faceted succulent planter, 85mm wide with drainage hole and matching drip tray"*).
@@ -41,6 +45,11 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
     - **Net Profit** (Emerald): Take-home maker profit margin.
   - **Interactive Tooltip:** Hover inspection showing exact dollar amounts, metric units (grams, kWh), and percentage of retail revenue.
   - **Batch Multiplier Selector:** Live toggle between 1x, 5x, 10x, and 25x units to simulate wholesale runs.
+- **Physical Printability & Structural Pre-Flight Check:**
+  - **Downside Face Normal Analysis:** Scans 3D mesh triangles for steep downward overhang angles ($>45^\circ$). Warns when underside overhangs lack slicer supports.
+  - **Thin Wall Detection:** Validates physical wall thickness against standard $0.4\text{mm}$ nozzle perimeters ($<0.8\text{mm}$ critical delamination risk; $<1.2\text{mm}$ fragility warning).
+  - **Aspect Ratio & Bed Adhesion:** Flags tall, slender parts ($>2.8:1$ height-to-width ratio) prone to print-bed detachment or upper-layer wobbling.
+  - **Interactive Warning Toast Notification:** Pops up on detected structural risks with severity indicators (Critical / Warning), issue explanation, and **1-Click Auto-Fix** buttons to instantly apply safe parameters.
 - **1kg Spool Yield:** Calculates exact number of finished parts producible from a single $1\text{kg}$ ($1000\text{g}$) spool for batch planning.
 
 ### 4. Version History & Cloud Checkpoints
@@ -75,6 +84,17 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
 ### 7. Etsy Market Intelligence Trend Radar & SEO Studio
 - **Google Search Grounding:** Powered by `gemini-3.5-flash` with Google Search Grounding to identify live trending keywords, buyer demand triggers, and retail price sweet spots.
 - **SEO Listing Package:** Generates optimized titles (under 140 chars), 13 high-volume search tags, formatted markdown descriptions, and lifestyle photo mockups.
+
+### 8. Interactive Onboarding Tour
+- **Step-by-Step Tooltip Walkthrough:** Highlights key operational areas for new makers:
+  1. **Interactive 3D CAD Canvas:** Orbit, pan, zoom, wireframe, slice plane, and viewcube controls.
+  2. **Parametric Dimensions Studio:** Dynamic millimeter adjustments, custom walls, and drainage holes.
+  3. **3D Slicer & Profit Optimizer:** Material densities (PLA, PETG, ABS, TPU, Resin) and animated Recharts breakdown.
+  4. **Laser Cutting & Engraving Studio:** Kerf offset settings and multi-layer vector export (Cut, Score, Engrave).
+  5. **Export & Bulk ZIP Archive:** Direct downloads and batch-packaging workflows.
+- **Smart Target Spotlight:** Dims the surrounding interface with a high-contrast glowing spotlight and position-aware tooltips.
+- **Seamless Tab Switching:** Automatically switches between Dimensions, Slicer, and Laser tabs to reveal corresponding controls during each step.
+- **Persistent Progress:** Remembers completion state via `localStorage` with a persistent **"Tour"** button in the header bar for anytime replay.
 
 ---
 
