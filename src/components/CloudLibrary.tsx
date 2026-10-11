@@ -21,6 +21,8 @@ import {
   Loader2,
   X,
   FileCheck,
+  MessageSquare,
+  Pin,
 } from 'lucide-react';
 import { CADDesign } from '../types/cad';
 import {
@@ -32,6 +34,7 @@ import {
   createBulkZipArchive,
 } from '../utils/stlExporter';
 import { buildParametricGeometry } from '../utils/geometryGenerators';
+import { downloadBambu3MF } from '../utils/bambuLabExporter';
 
 interface CloudLibraryProps {
   library: CADDesign[];
@@ -40,6 +43,7 @@ interface CloudLibraryProps {
   onDuplicateDesign: (design: CADDesign) => void;
   onDeleteDesign: (id: string) => void;
   onOpenVersionHistory?: (design: CADDesign) => void;
+  onOpenComments?: (design: CADDesign) => void;
   onClose: () => void;
 }
 
@@ -50,6 +54,7 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
   onDuplicateDesign,
   onDeleteDesign,
   onOpenVersionHistory,
+  onOpenComments,
   onClose,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -116,6 +121,14 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
     setTimeout(() => {
       handleExportLaserSVG(design);
     }, 400);
+  };
+
+  const handleExportBambu = async (design: CADDesign) => {
+    try {
+      await downloadBambu3MF(design);
+    } catch (err) {
+      console.error('Bambu 3MF export failed:', err);
+    }
   };
 
   const handleBulkZipDownload = async () => {
@@ -354,6 +367,21 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenComments) onOpenComments(design);
+                        }}
+                        className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded transition ${
+                          (design.comments?.length || 0) > 0
+                            ? 'bg-cyan-950/70 border border-cyan-700/80 text-cyan-300 hover:bg-cyan-900/60'
+                            : 'bg-slate-800/80 border border-slate-700/80 text-slate-400 hover:text-slate-200'
+                        }`}
+                        title={`View team notes & iteration log (${design.comments?.length || 0} notes)`}
+                      >
+                        <MessageSquare className="w-3 h-3 text-cyan-400" />
+                        <span>{design.comments?.length || 0}</span>
+                      </button>
                       <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/70 border border-indigo-800/60 px-1.5 py-0.5 rounded">
                         v{(design.versions?.length || 0) + 1}
                       </span>
@@ -391,6 +419,27 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
                       </span>
                     ))}
                   </div>
+
+                  {/* Pinned Collaboration Note Banner */}
+                  {design.comments && design.comments.some((c) => c.pinned) && (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenComments) onOpenComments(design);
+                      }}
+                      className="mt-2.5 p-2 bg-indigo-950/40 rounded-xl border border-indigo-500/40 text-[11px] text-indigo-200 flex items-start gap-1.5 hover:bg-indigo-950/60 transition cursor-pointer"
+                    >
+                      <Pin className="w-3 h-3 text-indigo-400 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="font-semibold text-indigo-300 block text-[10px] truncate">
+                          Pinned Note ({design.comments.find((c) => c.pinned)?.authorName}):
+                        </span>
+                        <p className="line-clamp-1 text-slate-300 text-[10px]">
+                          "{design.comments.find((c) => c.pinned)?.content}"
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card Actions */}
@@ -399,6 +448,13 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleExportBambu(design)}
+                      className="p-1.5 bg-emerald-950/70 hover:bg-emerald-600 hover:text-white text-emerald-300 border border-emerald-700/80 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1"
+                      title="Download Bambu Studio Project (.3mf)"
+                    >
+                      <span>.3MF</span>
+                    </button>
                     <button
                       onClick={() => handleExportSTL(design, true)}
                       className="p-1.5 bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-300 rounded-lg text-xs font-mono transition"
@@ -423,6 +479,26 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        if (onOpenComments) {
+                          onOpenComments(design);
+                        }
+                      }}
+                      className={`p-1.5 rounded-lg transition relative ${
+                        (design.comments?.length || 0) > 0
+                          ? 'text-cyan-300 bg-cyan-950/60 border border-cyan-800 hover:bg-cyan-900/60'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
+                      }`}
+                      title={`Team Notes & Iteration Log (${design.comments?.length || 0})`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      {(design.comments?.length || 0) > 0 && (
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-cyan-500 text-slate-950 rounded-full text-[9px] font-black flex items-center justify-center">
+                          {design.comments?.length}
+                        </span>
+                      )}
+                    </button>
                     <button
                       onClick={() => {
                         if (onOpenVersionHistory) {

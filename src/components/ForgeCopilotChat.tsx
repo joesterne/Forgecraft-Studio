@@ -174,6 +174,7 @@ export const ForgeCopilotChat: React.FC<ForgeCopilotChatProps> = ({
   if (!isOpen) return null;
 
   const quickPrompts = [
+    'How do I tune this model for Bambu Lab X1C & AMS?',
     'How do I calibrate laser kerf for tight inlays?',
     'Will this wall thickness survive Etsy postal shipping?',
     'What slicer settings maximize print speed without stringing?',

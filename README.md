@@ -36,8 +36,13 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
   - **ABS / ASA:** $1.05\text{ g/cm}^3$ ($-15.3\%$ lighter than PLA)
   - **TPU 95A:** $1.21\text{ g/cm}^3$ (Flexible impact elastomer)
   - **SLA Resin:** $1.15\text{ g/cm}^3$ (High-detail photopolymer)
+- **Print Cost Calculator (Material Density × Filament Price + Hourly Machine Labor):**
+  - **Dynamic Cost Engine:** Directly multiplies estimated part weight in grams (calculated using true physical material density: PLA $1.24\text{ g/cm}^3$, PETG $1.27\text{ g/cm}^3$, ABS $1.05\text{ g/cm}^3$, TPU $1.21\text{ g/cm}^3$, Resin $1.15\text{ g/cm}^3$) by a user-defined filament price per kg ($\$5 - \$250/\text{kg}$).
+  - **Configurable Machine Labor Rate:** Dynamically computes total machine run cost by multiplying print hours by a configurable hourly machine labor rate ($\$0.00 - \$35.00/\text{hr}$ with quick presets for Hobby $\$0/\text{hr}$, Print Farm $\$1.50/\text{hr}$, Prosumer $\$3.00/\text{hr}$, and Commercial Shop $\$6.00/\text{hr}$).
+  - **Interactive Formula Banner:** Displays live mathematical breakdown: $[ (\text{Weight}/1000) \times \$_{\text{kg}} ] + [ \text{Hours} \times \$_{\text{hr}} ] + \text{Power} = \text{Unit Cost}$.
+  - **Batch Production Scaling:** Simulates multi-unit farm runs ($1\times, 5\times, 10\times, 25\times, 50\times$) with total batch material, total machine time, total COGS, and targeted retail profit margins.
 - **Animated Recharts Production & Cost Visualizer:**
-  - **Reactive Entrance Animations:** Bars smoothly animate upward from the baseline with an `ease-out` curve whenever print settings (layer height, infill %, wall loops, spool cost, batch multiplier) are updated.
+  - **Reactive Entrance Animations:** Bars smoothly animate upward from the baseline with an `ease-out` curve whenever print settings (layer height, infill %, wall loops, spool cost, labor rate, batch multiplier) are updated.
   - **Comprehensive Resource Breakdown:**
     - **Material Usage** (Blue): Raw filament/resin cost calculated from total grams and spool price per kg.
     - **Energy Costs** (Amber): 3D printer electricity consumption calculated from print time and power draw ($\sim120\text{W}$ at $\$0.15/\text{kWh}$).
@@ -57,6 +62,13 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
 - **1-Click Revert:** Rollback to any prior state directly into the 3D viewport with automated pre-reversion backups.
 - **Side-by-Side Diff Inspector:** Compare any historical checkpoint against the current live model (dimensions, weight, material, price).
 - **Manual Checkpoints:** Save named snapshots (e.g. *"Client Approved V2"*, *"Thick Wall Prototype"*).
+- **Team Collaboration & Iteration Notes System:**
+  - **Categorized Threads:** Leave notes tagged as **Iteration Log** (🔄), **Production & Slicing** (⚙️), **QA & Print Test** (✅), **Client Feedback** (💬), or **General Team Note** (📝).
+  - **Role Profiles:** Tag authors by team role (`Maker`, `Designer`, `Print Tech`, `Shop Manager`, `Client`) with color-coded badges and avatars.
+  - **Version Stamping:** Automatically stamps notes with the active design revision (e.g., `v1`, `v2`, `v3`) to maintain an audit trail across geometric modifications.
+  - **Pin to Top & Resolution Tracking:** Pin high-priority maker warnings or mark action items as resolved.
+  - **Cloud Library Badges:** Cards display live note counts, open action item counters, and prominent preview callouts for pinned team directives.
+  - **Quick Starter Templates:** 1-click templates for print test logs, wall adjustments, tolerance warnings, and Etsy buyer requests.
 - **Bulk Multi-Select ZIP Archive:** Select multiple models from the Cloud Library to generate and download a single consolidated `.ZIP` bundle (powered by JSZip) containing:
   - High-precision binary `.STL` files (Bambu Lab, Prusa, Cura, Orca ready)
   - Color-coded laser cutting & engraving `.SVG` vector files (Cut, Score, Engrave)
@@ -85,18 +97,45 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
 - **Google Search Grounding:** Powered by `gemini-3.5-flash` with Google Search Grounding to identify live trending keywords, buyer demand triggers, and retail price sweet spots.
 - **SEO Listing Package:** Generates optimized titles (under 140 chars), 13 high-volume search tags, formatted markdown descriptions, and lifestyle photo mockups.
 
-### 8. Interactive Onboarding Tour
+### 8. Bambu Lab Studio & AMS 4-Color Integration
+- **Native `.3MF` Project Engine:** Generates official multi-file Bambu Studio and OrcaSlicer `.3mf` archives including:
+  - 3D model XML geometry centered dynamically for the target printer's build volume.
+  - Multi-material color group metadata mapping the model to the active AMS slot.
+  - `Metadata/BambuStudio.json` with slicer parameters, nozzle diameter, and bed coordinates.
+  - `Metadata/model_settings.config` and `Metadata/slice_info.config` pre-tuned for Bambu printers.
+  - `Metadata/README_BAMBU.txt` containing step-by-step printing instructions.
+- **Target Printer Fleet Profiles:**
+  - **Bambu Lab X1-Carbon:** 256×256×256mm, 500mm/s, 20,000mm/s² accel, Micro LiDAR, heated chamber.
+  - **Bambu Lab X1E:** 256×256×256mm, 320°C hotend, 60°C heated chamber, enterprise networking.
+  - **Bambu Lab P1S:** 256×256×256mm, enclosed CoreXY, high-speed auxiliary cooling.
+  - **Bambu Lab P1P:** 256×256×256mm, open frame CoreXY speed platform.
+  - **Bambu Lab A1:** 256×256×256mm, full-size bed slinger with active noise cancelling and AMS Lite.
+  - **Bambu Lab A1 mini:** 180×180×180mm, compact high-precision platform with quick-swap nozzles.
+- **Bambu AMS Multi-Color Slot Manager:**
+  - Configure 4 multi-material slots with Bambu filament profiles (PLA Basic, PLA Matte, Silk, Tough, PETG HF, PETG-CF, ABS, ASA, TPU 95A, and Support for PLA).
+  - Visual color swatch palette with instant slot assignment and active toolhead selection.
+  - Real-time 3D canvas viewport synchronization rendering the model in the active AMS filament color.
+- **Build Plate & Nozzle Customization:**
+  - Plate options: Gold Textured PEI, Smooth PEI / High Temp, Engineering, and Cool Plate.
+  - Nozzle diameters: 0.2mm (fine detail / jewelry), 0.4mm (standard), 0.6mm (speed / composite), and 0.8mm (high flow).
+  - Speed presets: Silent (50%), Standard (100%), Sport (124%), and Ludicrous (166%).
+- **High-Speed Velocity Comparison:** Real-time production velocity calculator showing hours saved on Bambu CoreXY (~2.6× faster than traditional 60mm/s bed slingers).
+- **Thermal & Volumetric Tuning:** Automatic hotend and bed temperature recommendations based on selected material and plate type.
+- **Export Everywhere:** 1-Click `.3MF` downloads available in the header Export dropdown, 3D viewport quick export button, dedicated Bambu Lab Workbench tab, Slicer panel, and Cloud Library cards.
+
+### 9. Interactive Onboarding Tour
 - **Step-by-Step Tooltip Walkthrough:** Highlights key operational areas for new makers:
   1. **Interactive 3D CAD Canvas:** Orbit, pan, zoom, wireframe, slice plane, and viewcube controls.
   2. **Parametric Dimensions Studio:** Dynamic millimeter adjustments, custom walls, and drainage holes.
   3. **3D Slicer & Profit Optimizer:** Material densities (PLA, PETG, ABS, TPU, Resin) and animated Recharts breakdown.
-  4. **Laser Cutting & Engraving Studio:** Kerf offset settings and multi-layer vector export (Cut, Score, Engrave).
-  5. **Export & Bulk ZIP Archive:** Direct downloads and batch-packaging workflows.
+  4. **Bambu Lab Studio:** Printer selection (X1C/P1S/A1), AMS multi-color slot manager, and native `.3MF` downloads.
+  5. **Laser Cutting & Engraving Studio:** Kerf offset settings and multi-layer vector export (Cut, Score, Engrave).
+  6. **Export & Bulk ZIP Archive:** Direct downloads and batch-packaging workflows.
 - **Smart Target Spotlight:** Dims the surrounding interface with a high-contrast glowing spotlight and position-aware tooltips.
-- **Seamless Tab Switching:** Automatically switches between Dimensions, Slicer, and Laser tabs to reveal corresponding controls during each step.
+- **Seamless Tab Switching:** Automatically switches between Dimensions, Slicer, Bambu Lab, and Laser tabs to reveal corresponding controls during each step.
 - **Persistent Progress:** Remembers completion state via `localStorage` with a persistent **"Tour"** button in the header bar for anytime replay.
 
-### 9. AI Lifestyle Mockup Generator Studio
+### 10. AI Lifestyle Mockup Generator Studio
 - **3D-to-Lifestyle Staging:** Transforms the live 3D parametric CAD design into commercial 4:3 product photography tailored for Etsy listing covers and social promotion.
 - **Etsy Bestseller Scene Presets:**
   - **🪴 Nordic Oak Workspace:** Light Scandinavian desk, ceramic coffee cup, and sunny potted succulent.

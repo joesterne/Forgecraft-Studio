@@ -426,7 +426,10 @@ export function calculatePrintStats(dimensions: ModelDimensions, printSettings: 
     ABS: 1.05,
     Resin: 1.15,
   };
-  const density = densities[material] || 1.24;
+  const density =
+    typeof printSettings.materialDensity === 'number' && printSettings.materialDensity > 0
+      ? Number(printSettings.materialDensity.toFixed(3))
+      : densities[material] || 1.24;
   const weightGrams = Number((totalVolumeCm3 * density).toFixed(1));
 
   // Weights for comparison across materials

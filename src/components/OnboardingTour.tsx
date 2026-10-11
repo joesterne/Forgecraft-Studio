@@ -18,7 +18,7 @@ import {
 export interface TourStep {
   id: string;
   targetSelector: string;
-  tabToActivate?: 'dimensions' | 'slicer' | 'laser';
+  tabToActivate?: 'dimensions' | 'slicer' | 'bambu' | 'laser';
   title: string;
   subtitle: string;
   description: string;
@@ -32,7 +32,7 @@ export interface TourStep {
 interface OnboardingTourProps {
   isOpen: boolean;
   onClose: () => void;
-  onTabChange?: (tab: 'dimensions' | 'slicer' | 'laser') => void;
+  onTabChange?: (tab: 'dimensions' | 'slicer' | 'bambu' | 'laser') => void;
 }
 
 export const OnboardingTour: React.FC<OnboardingTourProps> = ({
@@ -87,6 +87,20 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
       positionPreference: 'left',
     },
     {
+      id: 'bambu',
+      targetSelector: '#tour-tab-bambu',
+      tabToActivate: 'bambu',
+      title: 'Bambu Lab Studio Integration',
+      subtitle: 'Official .3MF Projects & AMS 4-Color Mapping',
+      description:
+        'Target X1-Carbon, X1E, P1S, P1P, A1, or A1 mini. Tune PEI textured plates, high-speed presets (up to 500 mm/s), nozzle sizes (0.2 - 0.8mm), and map multi-color filament slots directly into native Bambu Studio .3MF files.',
+      tip: 'Exported .3mf files open pre-configured in Bambu Studio or OrcaSlicer ready to send via Bambu Cloud or SD.',
+      badge: 'Step 3: Bambu Lab',
+      badgeColor: 'bg-teal-950/80 text-teal-300 border-teal-800/80',
+      icon: <Printer className="w-5 h-5 text-teal-400" />,
+      positionPreference: 'left',
+    },
+    {
       id: 'laser',
       targetSelector: '#tour-tab-laser',
       tabToActivate: 'laser',
@@ -95,7 +109,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({
       description:
         'Generate industry-standard layered SVG and AutoCAD DXF files (Red=Cut, Blue=Score, Black=Engrave). Configure kerf offsets to ensure friction-tight joinery and inlays on laser cutters.',
       tip: 'Tuned profiles available for Diode (10W/20W), CO2 (45W/55W), and Fiber lasers.',
-      badge: 'Step 3: Laser Vectors',
+      badge: 'Step 4: Laser Vectors',
       badgeColor: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
       icon: <Flame className="w-5 h-5 text-rose-400" />,
       positionPreference: 'left',

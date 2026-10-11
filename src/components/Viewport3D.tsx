@@ -19,13 +19,14 @@ import {
 import { CADDesign } from '../types/cad';
 import { buildParametricGeometry } from '../utils/geometryGenerators';
 import { generateBinarySTL, generateLaserSVG, downloadFile } from '../utils/stlExporter';
+import { downloadBambu3MF } from '../utils/bambuLabExporter';
 
 interface Viewport3DProps {
   design: CADDesign;
-  activeTab?: 'dimensions' | 'slicer' | 'laser';
+  activeTab?: 'dimensions' | 'slicer' | 'laser' | 'bambu';
   onGeometryReady?: (geometry: THREE.BufferGeometry) => void;
   onSnapshot?: (dataUrl: string) => void;
-  onQuickExport?: (format: 'stl' | 'svg') => void;
+  onQuickExport?: (format: 'stl' | 'svg' | '3mf') => void;
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -51,12 +52,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const [isQuickExporting, setIsQuickExporting] = useState<boolean>(false);
 
   const isLaserActive = activeTab === 'laser';
-  const exportFormatLabel = isLaserActive ? '.SVG' : '.STL';
-  const exportDestinationLabel = isLaserActive ? 'Laser Cut & Engrave' : '3D Print Ready';
+  const isBambuActive = activeTab === 'bambu';
+  const exportFormatLabel = isBambuActive ? '.3MF' : isLaserActive ? '.SVG' : '.STL';
+  const exportDestinationLabel = isBambuActive
+    ? 'Bambu Studio Project'
+    : isLaserActive
+    ? 'Laser Cut & Engrave'
+    : '3D Print Ready';
 
-  const handleQuickExport = () => {
+  const handleQuickExport = async () => {
     if (onQuickExport) {
-      onQuickExport(isLaserActive ? 'svg' : 'stl');
+      onQuickExport(isBambuActive ? '3mf' : isLaserActive ? 'svg' : 'stl');
       setQuickExportSuccess(true);
       setTimeout(() => setQuickExportSuccess(false), 2200);
       return;
@@ -65,7 +71,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     setIsQuickExporting(true);
     try {
       const cleanName = design.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-      if (isLaserActive) {
+      if (isBambuActive) {
+        await downloadBambu3MF(design, currentGeometryRef.current || undefined);
+      } else if (isLaserActive) {
         const svgContent = generateLaserSVG(design);
         const blob = new Blob([svgContent], { type: 'image/svg+xml' });
         downloadFile(blob, `${cleanName}_laser.svg`);
@@ -265,6 +273,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         roughness: 0.5,
         clippingPlanes: isSlicingActive && clipPlaneRef.current ? [clipPlaneRef.current] : [],
       });
+    } else if (activeTab === 'bambu' && design.bambuSettings) {
+      const activeSlotNum = design.bambuSettings.activeSlot || 1;
+      const activeSlot = design.bambuSettings.amsSlots?.find((s) => s.slotNumber === activeSlotNum);
+      const hexColor = activeSlot?.colorHex || '#10B981';
+      material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(hexColor),
+        roughness: 0.36,
+        metalness: 0.12,
+        clippingPlanes: isSlicingActive && clipPlaneRef.current ? [clipPlaneRef.current] : [],
+        clipShadows: true,
+      });
     } else {
       // Solid matte / terracotta / studio clay
       material = new THREE.MeshStandardMaterial({
@@ -455,6 +474,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           className={`group flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-2xl font-bold text-xs transition-all duration-300 transform active:scale-95 border cursor-pointer ${
             quickExportSuccess
               ? 'bg-emerald-600 border-emerald-400 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/50'
+              : isBambuActive
+              ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white border-emerald-400/50 shadow-emerald-950/50 hover:shadow-emerald-900/40'
               : isLaserActive
               ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white border-rose-400/50 shadow-rose-950/50 hover:shadow-rose-900/40'
               : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white border-blue-400/50 shadow-blue-950/50 hover:shadow-blue-900/40'
@@ -472,7 +493,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           ) : (
             <>
               <div className="p-1 rounded-lg bg-black/20 group-hover:bg-black/30 transition">
-                {isLaserActive ? (
+                {isBambuActive ? (
+                  <Printer className="w-4 h-4 text-emerald-200 shrink-0" />
+                ) : isLaserActive ? (
                   <Flame className="w-4 h-4 text-amber-200 shrink-0" />
                 ) : (
                   <Printer className="w-4 h-4 text-cyan-200 shrink-0" />

@@ -24,10 +24,11 @@ import {
 } from 'lucide-react';
 import * as THREE from 'three';
 
-import { CADDesign, ModelType, ModelDimensions, PrintSettings, LaserSettings, DesignVersion } from './types/cad';
+import { CADDesign, ModelType, ModelDimensions, PrintSettings, LaserSettings, DesignVersion, BambuLabSettings } from './types/cad';
 import { Viewport3D } from './components/Viewport3D';
 import { DimensionEditor } from './components/DimensionEditor';
 import { PrintOptimizer } from './components/PrintOptimizer';
+import { BambuLabPanel } from './components/BambuLabPanel';
 import { LaserStudio } from './components/LaserStudio';
 import { PrintServiceApiModal } from './components/PrintServiceApiModal';
 import { CloudLibrary } from './components/CloudLibrary';
@@ -38,6 +39,7 @@ import { DescribeAndCreateModal } from './components/DescribeAndCreateModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { OnboardingTour } from './components/OnboardingTour';
 import { AIMockupGeneratorModal } from './components/AIMockupGeneratorModal';
+import { DesignCommentsModal } from './components/DesignCommentsModal';
 
 import {
   generateBinarySTL,
@@ -46,13 +48,14 @@ import {
   generateDXFVector,
   downloadFile,
 } from './utils/stlExporter';
+import { downloadBambu3MF } from './utils/bambuLabExporter';
 import { buildParametricGeometry } from './utils/geometryGenerators';
 
 export default function App() {
   // Cloud library state
   const [library, setLibrary] = useState<CADDesign[]>([]);
   const [activeDesign, setActiveDesign] = useState<CADDesign | null>(null);
-  const [activeTab, setActiveTab] = useState<'dimensions' | 'slicer' | 'laser'>('dimensions');
+  const [activeTab, setActiveTab] = useState<'dimensions' | 'slicer' | 'bambu' | 'laser'>('dimensions');
 
   // Modals & Panels
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -67,6 +70,8 @@ export default function App() {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isMockupModalOpen, setIsMockupModalOpen] = useState(false);
   const [currentSnapshot, setCurrentSnapshot] = useState<string | null>(null);
+  const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
+  const [commentsTargetDesign, setCommentsTargetDesign] = useState<CADDesign | null>(null);
 
   // Auto-launch onboarding tour for first-time visitors
   useEffect(() => {
@@ -272,6 +277,17 @@ export default function App() {
     saveToLibrary(updated);
   };
 
+  // Bambu Lab settings change handler
+  const handleBambuSettingsChange = (newSettings: BambuLabSettings) => {
+    if (!activeDesign) return;
+    const updated: CADDesign = {
+      ...activeDesign,
+      bambuSettings: newSettings,
+      updatedAt: new Date().toISOString(),
+    };
+    saveToLibrary(updated);
+  };
+
   // AI Idea to Parametric CAD generator
   const handleGenerateAiCad = async (promptOverride?: string) => {
     const prompt = promptOverride || aiIdeaPrompt.trim();
@@ -382,6 +398,13 @@ export default function App() {
   const handleExportBundle = () => {
     handleExportSTL(true);
     setTimeout(() => handleExportSVG(), 300);
+    setIsExportDropdownOpen(false);
+  };
+
+  const handleExportBambu3MF = async () => {
+    if (!activeDesign) return;
+    const geom = currentGeometryRef.current || buildParametricGeometry(activeDesign.modelType, activeDesign.dimensions);
+    await downloadBambu3MF(activeDesign, geom);
     setIsExportDropdownOpen(false);
   };
 
@@ -531,6 +554,26 @@ export default function App() {
             <span className="hidden lg:inline">AI Mockups</span>
           </button>
 
+          {/* Team Collaboration Notes Button */}
+          <button
+            onClick={() => {
+              if (activeDesign) {
+                setCommentsTargetDesign(activeDesign);
+                setIsCommentsModalOpen(true);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition shadow-sm"
+            title="Team Collaboration & Iteration Notes"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">Notes</span>
+            {(activeDesign?.comments?.length || 0) > 0 && (
+              <span className="bg-cyan-500 text-slate-950 px-1.5 py-0.2 rounded-full font-black text-[10px]">
+                {activeDesign?.comments?.length}
+              </span>
+            )}
+          </button>
+
           {/* Onboarding Tour Button */}
           <button
             id="tour-nav-button"
@@ -554,13 +597,30 @@ export default function App() {
             </button>
 
             {isExportDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 space-y-1">
+              <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 space-y-1">
+                {/* 1-Click Official Bambu Studio 3MF Project */}
+                <button
+                  onClick={handleExportBambu3MF}
+                  className="w-full text-left px-3 py-2 text-xs rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-200 font-semibold flex items-center justify-between border border-emerald-500/40 transition shadow-sm"
+                  title="Official Bambu Studio & OrcaSlicer project file with tuned layer profile and AMS 4-color mapping"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold text-white">Bambu Studio (.3MF)</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono">
+                    X1/P1/A1
+                  </span>
+                </button>
+
+                <div className="w-full h-px bg-slate-800 my-1" />
+
                 <button
                   onClick={() => handleExportSTL(true)}
                   className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-200 flex items-center justify-between transition"
                 >
                   <span className="font-semibold text-white">Download .STL (Binary)</span>
-                  <span className="text-[10px] text-blue-400 font-mono">Bambu/Prusa</span>
+                  <span className="text-[10px] text-blue-400 font-mono">Standard CAD</span>
                 </button>
 
                 <button
@@ -749,11 +809,11 @@ export default function App() {
         {/* Right Column: Parametric Controls & Manufacturing Tools */}
         <section className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4">
           {/* Workbench Tabs */}
-          <div className="flex items-center bg-slate-900/90 border border-slate-800 p-1 rounded-2xl">
+          <div className="flex items-center bg-slate-900/90 border border-slate-800 p-1 rounded-2xl gap-1">
             <button
               id="tour-tab-dimensions"
               onClick={() => setActiveTab('dimensions')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'dimensions'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'
@@ -766,7 +826,7 @@ export default function App() {
             <button
               id="tour-tab-slicer"
               onClick={() => setActiveTab('slicer')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'slicer'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'
@@ -777,9 +837,22 @@ export default function App() {
             </button>
 
             <button
+              id="tour-tab-bambu"
+              onClick={() => setActiveTab('bambu')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition ${
+                activeTab === 'bambu'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Bambu Lab</span>
+            </button>
+
+            <button
               id="tour-tab-laser"
               onClick={() => setActiveTab('laser')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition ${
                 activeTab === 'laser'
                   ? 'bg-rose-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'
@@ -804,6 +877,14 @@ export default function App() {
                 design={activeDesign}
                 onChangePrintSettings={handlePrintSettingsChange}
                 onChangeDimensions={handleDimensionsChange}
+                onChangeBambuSettings={handleBambuSettingsChange}
+              />
+            )}
+
+            {activeTab === 'bambu' && (
+              <BambuLabPanel
+                design={activeDesign}
+                onUpdateBambuSettings={handleBambuSettingsChange}
               />
             )}
 
@@ -874,6 +955,10 @@ export default function App() {
           onOpenVersionHistory={(d) => {
             setHistoryTargetDesign(d);
             setIsHistoryModalOpen(true);
+          }}
+          onOpenComments={(d) => {
+            setCommentsTargetDesign(d);
+            setIsCommentsModalOpen(true);
           }}
           onClose={() => setIsLibraryOpen(false)}
         />
@@ -950,6 +1035,21 @@ export default function App() {
           }}
           onOpenEtsyListing={() => setIsEtsyListingOpen(true)}
           onClose={() => setIsMockupModalOpen(false)}
+        />
+      )}
+
+      {/* Team Collaboration & Iteration Notes Modal */}
+      {isCommentsModalOpen && (commentsTargetDesign || activeDesign) && (
+        <DesignCommentsModal
+          design={commentsTargetDesign || activeDesign!}
+          onUpdateComments={(updatedDesign) => {
+            saveToLibrary(updatedDesign);
+            setCommentsTargetDesign(updatedDesign);
+          }}
+          onClose={() => {
+            setIsCommentsModalOpen(false);
+            setCommentsTargetDesign(null);
+          }}
         />
       )}
 

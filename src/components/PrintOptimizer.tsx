@@ -27,6 +27,7 @@ import {
   Sliders,
   ChevronDown,
   ChevronUp,
+  Calculator,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -38,20 +39,177 @@ import {
   Cell,
   CartesianGrid,
 } from 'recharts';
-import { CADDesign, MaterialType, InfillPattern, PrintSettings, ModelDimensions } from '../types/cad';
+import {
+  CADDesign,
+  MaterialType,
+  InfillPattern,
+  PrintSettings,
+  ModelDimensions,
+  BambuLabSettings,
+} from '../types/cad';
 import { calculatePrintStats } from '../utils/stlExporter';
 import { analyzePrintability, PrintabilityReport, PrintabilityIssue } from '../utils/printabilityChecker';
+import { BambuLabPanel } from './BambuLabPanel';
+
+export interface MaterialPresetItem {
+  id: string;
+  name: string;
+  shortName: string;
+  baseMaterial: MaterialType;
+  density: number; // g/cm³
+  category: 'Standard' | 'Flexible' | 'Engineering' | 'Composite' | 'Resin';
+  typicalPricePerKg: number;
+  description: string;
+  color: string;
+}
+
+export const COMMON_MATERIAL_PRESETS: MaterialPresetItem[] = [
+  {
+    id: 'PLA',
+    name: 'PLA (Standard / Silk / Matte)',
+    shortName: 'PLA',
+    baseMaterial: 'PLA',
+    density: 1.24,
+    category: 'Standard',
+    typicalPricePerKg: 20,
+    description: 'Most popular, crisp detail, biodegradable, easy to print',
+    color: 'text-blue-400',
+  },
+  {
+    id: 'PLA-PLUS',
+    name: 'PLA+ / Tough PLA (High Impact)',
+    shortName: 'PLA+',
+    baseMaterial: 'PLA',
+    density: 1.25,
+    category: 'Standard',
+    typicalPricePerKg: 24,
+    description: 'Impact modified, improved ductility and layer adhesion',
+    color: 'text-cyan-400',
+  },
+  {
+    id: 'PETG',
+    name: 'PETG (Tough / Chemical & UV Resistant)',
+    shortName: 'PETG',
+    baseMaterial: 'PETG',
+    density: 1.27,
+    category: 'Standard',
+    typicalPricePerKg: 24,
+    description: 'UV resistant, food-safe, strong layer bond, heat tolerant',
+    color: 'text-amber-400',
+  },
+  {
+    id: 'ABS',
+    name: 'ABS (High Temp / Lightweight)',
+    shortName: 'ABS',
+    baseMaterial: 'ABS',
+    density: 1.05,
+    category: 'Engineering',
+    typicalPricePerKg: 22,
+    description: '15.3% lighter than PLA, heat & impact resistant to 100°C',
+    color: 'text-rose-400',
+  },
+  {
+    id: 'ASA',
+    name: 'ASA (All-Weather / UV Weatherproof)',
+    shortName: 'ASA',
+    baseMaterial: 'ABS',
+    density: 1.07,
+    category: 'Engineering',
+    typicalPricePerKg: 28,
+    description: 'Outdoor weatherproof, UV stable, does not yellow in sun',
+    color: 'text-orange-400',
+  },
+  {
+    id: 'TPU-95A',
+    name: 'TPU 95A (Flexible / Rubbery / Impact)',
+    shortName: 'TPU 95A',
+    baseMaterial: 'TPU',
+    density: 1.21,
+    category: 'Flexible',
+    typicalPricePerKg: 32,
+    description: 'Rubber-like flexibility, high abrasion resistance, drop-proof',
+    color: 'text-emerald-400',
+  },
+  {
+    id: 'TPU-85A',
+    name: 'TPU 85A (Ultra-Soft Elastic)',
+    shortName: 'TPU 85A',
+    baseMaterial: 'TPU',
+    density: 1.18,
+    category: 'Flexible',
+    typicalPricePerKg: 36,
+    description: 'Very soft elasticity for flexible gaskets, seals & dampeners',
+    color: 'text-teal-400',
+  },
+  {
+    id: 'PC',
+    name: 'PC (Polycarbonate - Extreme Strength)',
+    shortName: 'PC',
+    baseMaterial: 'PETG',
+    density: 1.20,
+    category: 'Engineering',
+    typicalPricePerKg: 42,
+    description: 'Extreme tensile strength & heat deflection up to 115°C',
+    color: 'text-indigo-400',
+  },
+  {
+    id: 'PA-NYLON',
+    name: 'Nylon / PA12 (Low Friction Wear Resistant)',
+    shortName: 'Nylon PA12',
+    baseMaterial: 'PETG',
+    density: 1.14,
+    category: 'Engineering',
+    typicalPricePerKg: 45,
+    description: 'Low friction, durable engineering gears & mechanical joints',
+    color: 'text-violet-400',
+  },
+  {
+    id: 'PLA-CF',
+    name: 'PLA-CF (Carbon Fiber Reinforced PLA)',
+    shortName: 'PLA-CF',
+    baseMaterial: 'PLA',
+    density: 1.29,
+    category: 'Composite',
+    typicalPricePerKg: 36,
+    description: 'Rigid carbon fiber matrix, no warping, matte composite finish',
+    color: 'text-sky-300',
+  },
+  {
+    id: 'PETG-CF',
+    name: 'PETG-CF (Carbon Fiber Reinforced PETG)',
+    shortName: 'PETG-CF',
+    baseMaterial: 'PETG',
+    density: 1.30,
+    category: 'Composite',
+    typicalPricePerKg: 40,
+    description: 'High stiffness & structural load capacity with carbon fibers',
+    color: 'text-yellow-300',
+  },
+  {
+    id: 'RESIN',
+    name: 'SLA / UV Standard Photopolymer Resin',
+    shortName: 'SLA Resin',
+    baseMaterial: 'Resin',
+    density: 1.15,
+    category: 'Resin',
+    typicalPricePerKg: 35,
+    description: 'Ultra-high 0.05mm precision liquid resin for smooth miniatures',
+    color: 'text-purple-400',
+  },
+];
 
 interface PrintOptimizerProps {
   design: CADDesign;
   onChangePrintSettings: (newSettings: Partial<PrintSettings>) => void;
   onChangeDimensions?: (newDims: Partial<ModelDimensions>) => void;
+  onChangeBambuSettings?: (newBambu: BambuLabSettings) => void;
 }
 
 export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   design,
   onChangePrintSettings,
   onChangeDimensions,
+  onChangeBambuSettings,
 }) => {
   const p = design.printSettings;
   const stats = calculatePrintStats(design.dimensions, design.printSettings);
@@ -61,6 +219,18 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   const [isToastDismissed, setIsToastDismissed] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
+
+  // Configurable hourly machine labor rate ($/hour) and production settings
+  const [machineLaborRate, setMachineLaborRate] = useState<number>(() => {
+    const saved = localStorage.getItem('forgecraft_labor_rate');
+    return saved !== null ? Number(saved) : 2.50; // default $2.50 / hr
+  });
+  const [includePowerInCost, setIncludePowerInCost] = useState<boolean>(true);
+  const [targetMarkupMultiplier, setTargetMarkupMultiplier] = useState<number>(3.5);
+
+  useEffect(() => {
+    localStorage.setItem('forgecraft_labor_rate', String(machineLaborRate));
+  }, [machineLaborRate]);
 
   // Run real-time physical printability check
   const printability: PrintabilityReport = useMemo(() => {
@@ -98,6 +268,55 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
     { id: 'Resin', name: 'SLA Resin', desc: 'Ultra-high 0.05mm precision', density: 1.15, temp: 'UV 405nm', color: 'text-purple-400' },
   ];
 
+  // Active material preset resolution
+  const activePreset = useMemo(() => {
+    if (p.materialPreset && p.materialPreset !== 'custom') {
+      const match = COMMON_MATERIAL_PRESETS.find((m) => m.id === p.materialPreset);
+      if (match) return match;
+    }
+    // Match by density and base material
+    const densityMatch = COMMON_MATERIAL_PRESETS.find(
+      (m) => m.baseMaterial === p.material && Math.abs(m.density - stats.density) < 0.01
+    );
+    if (densityMatch) return densityMatch;
+    // Match by base material
+    return COMMON_MATERIAL_PRESETS.find((m) => m.id === p.material) || COMMON_MATERIAL_PRESETS[0];
+  }, [p.material, p.materialPreset, stats.density]);
+
+  const currentPresetId = useMemo(() => {
+    if (p.materialPreset === 'custom') return 'custom';
+    return activePreset?.id || 'PLA';
+  }, [p.materialPreset, activePreset]);
+
+  const handleMaterialPresetSelect = (presetId: string) => {
+    if (presetId === 'custom') {
+      onChangePrintSettings({
+        materialPreset: 'custom',
+      });
+      return;
+    }
+    const preset = COMMON_MATERIAL_PRESETS.find((m) => m.id === presetId);
+    if (preset) {
+      onChangePrintSettings({
+        material: preset.baseMaterial,
+        materialPreset: preset.id,
+        materialDensity: preset.density,
+      });
+    }
+  };
+
+  const handleCustomDensityChange = (val: number) => {
+    if (isNaN(val) || val <= 0) return;
+    const clamped = Math.max(0.5, Math.min(5.0, Number(val.toFixed(3))));
+    const matchingPreset = COMMON_MATERIAL_PRESETS.find(
+      (m) => Math.abs(m.density - clamped) < 0.005 && m.baseMaterial === p.material
+    );
+    onChangePrintSettings({
+      materialDensity: clamped,
+      materialPreset: matchingPreset ? matchingPreset.id : 'custom',
+    });
+  };
+
   const infillPatterns: { id: InfillPattern; name: string; badge: string }[] = [
     { id: 'gyroid', name: 'Gyroid', badge: 'Best for Planters / Watertight' },
     { id: 'grid', name: 'Grid', badge: 'Fastest Print Speed' },
@@ -107,40 +326,73 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   const currentWeight = stats.weightGrams;
   const qty = batchQuantity;
 
+  // Print Cost Calculator Formulas:
+  const filamentCostPerKg = p.filamentCostPerKg || 22;
+  const materialDensity = stats.density; // e.g. 1.24 for PLA, 1.27 for PETG, 1.05 for ABS, 1.21 for TPU
+  const estimatedWeightGrams = stats.weightGrams;
+  const printTimeHours = stats.printTimeHours;
+
+  // 1. Material Cost ($/unit) = (weight in grams / 1000) * filament price per kg
+  const unitMaterialCost = Number(((estimatedWeightGrams / 1000) * filamentCostPerKg).toFixed(2));
+
+  // 2. Machine Labor Cost ($/unit) = print time in hours * hourly machine labor rate
+  const unitMachineLaborCost = Number((printTimeHours * machineLaborRate).toFixed(2));
+
+  // 3. Electricity / Operating Power ($/unit)
+  const unitPowerCost = includePowerInCost ? stats.electricityCost : 0;
+
+  // 4. Total Production Cost ($/unit)
+  const unitProductionCost = Number((unitMaterialCost + unitMachineLaborCost + unitPowerCost).toFixed(2));
+
+  // Batch totals for batchQuantity (qty)
+  const batchMaterialCost = Number((unitMaterialCost * qty).toFixed(2));
+  const batchLaborCost = Number((unitMachineLaborCost * qty).toFixed(2));
+  const batchPowerCost = Number((unitPowerCost * qty).toFixed(2));
+  const batchTotalProductionCost = Number((unitProductionCost * qty).toFixed(2));
+
+  // Target Retail & Profit
+  const unitTargetRetail = Number(Math.max(4.99, unitProductionCost * targetMarkupMultiplier).toFixed(2));
+  const unitNetProfit = Number((unitTargetRetail - unitProductionCost).toFixed(2));
+  const profitMarginPercent = Math.round((unitNetProfit / unitTargetRetail) * 100);
+
   // Dynamic animation key computed from all reactive print settings:
-  // Re-keys the chart whenever materials, infill, layer height, walls, or batch quantity change,
+  // Re-keys the chart whenever materials, infill, layer height, labor rate, or batch quantity change,
   // triggering a smooth upward entrance animation from 0 to target values.
-  const chartAnimationKey = `recharts-${p.material}-${p.infillDensity}-${p.layerHeight}-${p.wallCount}-${p.filamentCostPerKg || 20}-${batchQuantity}-${stats.weightGrams}`;
+  const chartAnimationKey = `recharts-${p.material}-${p.materialPreset || ''}-${materialDensity}-${p.infillDensity}-${p.layerHeight}-${p.wallCount}-${filamentCostPerKg}-${machineLaborRate}-${includePowerInCost}-${targetMarkupMultiplier}-${batchQuantity}-${stats.weightGrams}`;
 
   // Prepare Recharts bar chart data based on selected settings and multiplier
   const chartData = [
     {
-      category: 'Material Usage',
-      cost: Number((stats.materialCost * qty).toFixed(2)),
-      description: `${(stats.weightGrams * qty).toFixed(1)}g ${p.material} at $${p.filamentCostPerKg}/kg`,
+      category: 'Material Cost',
+      cost: batchMaterialCost,
+      description: `${(estimatedWeightGrams * qty).toFixed(1)}g ${activePreset?.shortName || p.material} (${materialDensity}g/cm³) at $${filamentCostPerKg}/kg`,
       color: '#3b82f6',
-      percentage: Number(((stats.materialCost / (stats.recommendedRetailPrice || 1)) * 100).toFixed(1)),
+      percentage: Number(((unitMaterialCost / (unitTargetRetail || 1)) * 100).toFixed(1)),
     },
     {
-      category: 'Energy Costs',
-      cost: Number((stats.electricityCost * qty).toFixed(2)),
-      description: `${(stats.electricityKwh * qty).toFixed(2)} kWh (~120W printer load)`,
-      color: '#f59e0b',
-      percentage: Number(((stats.electricityCost / (stats.recommendedRetailPrice || 1)) * 100).toFixed(1)),
+      category: 'Machine Labor',
+      cost: batchLaborCost,
+      description: `${(printTimeHours * qty).toFixed(1)} hrs print time at $${machineLaborRate.toFixed(2)}/hr`,
+      color: '#6366f1',
+      percentage: Number(((unitMachineLaborCost / (unitTargetRetail || 1)) * 100).toFixed(1)),
     },
+    ...(includePowerInCost
+      ? [
+          {
+            category: 'Energy & Power',
+            cost: batchPowerCost,
+            description: `${(stats.electricityKwh * qty).toFixed(2)} kWh (~120W printer load)`,
+            color: '#f59e0b',
+            percentage: Number(((unitPowerCost / (unitTargetRetail || 1)) * 100).toFixed(1)),
+          },
+        ]
+      : []),
     {
-      category: 'Service Fees',
-      cost: Number((stats.totalServiceFees * qty).toFixed(2)),
-      description: `Etsy 6.5% + payment 3.5% + $${(stats.packagingCost * qty).toFixed(2)} packaging`,
-      color: '#ec4899',
-      percentage: Number(((stats.totalServiceFees / (stats.recommendedRetailPrice || 1)) * 100).toFixed(1)),
-    },
-    {
-      category: 'Net Profit',
-      cost: Number((stats.netProfit * qty).toFixed(2)),
-      description: `Take-home earnings (${stats.profitMargin}% margin)`,
+      category: 'Net Margin',
+      cost: Number((unitNetProfit * qty).toFixed(2)),
+      description: `Take-home earnings at ${targetMarkupMultiplier}x markup (${profitMarginPercent}%)`,
       color: '#10b981',
-      percentage: stats.profitMargin,
+      percentage: profitMarginPercent,
     },
   ];
 
@@ -484,7 +736,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
                 <span>Material Weight Estimator</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80">
-                  {p.material} ({stats.density} g/cm³)
+                  {activePreset?.shortName || p.material} ({stats.density} g/cm³)
                 </span>
               </h4>
               <p className="text-[10px] text-slate-400">
@@ -562,7 +814,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               return (
                 <button
                   key={mat.id}
-                  onClick={() => onChangePrintSettings({ material: mat.id })}
+                  onClick={() => onChangePrintSettings({ material: mat.id, materialPreset: mat.id, materialDensity: mat.density })}
                   className={`p-2.5 rounded-xl text-left border transition relative ${
                     isSelected
                       ? 'bg-indigo-600/20 border-indigo-400 ring-1 ring-indigo-400/50'
@@ -635,6 +887,439 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
         )}
       </div>
 
+      {/* PRINT COST CALCULATOR (Material Weight × Price/kg + Hourly Machine Labor) */}
+      <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-emerald-500/30 shadow-xl space-y-4 relative overflow-hidden">
+        {/* Glow accent */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Section Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/15 text-emerald-400 rounded-xl border border-emerald-500/30 shadow-inner">
+              <Calculator className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-100">
+                  Print Cost Calculator
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/80 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Dynamic Cost Engine
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Calculates production cost multiplying estimated weight by user filament price and adding configurable machine labor rate.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px]">
+            <span className="text-slate-400 px-1.5 font-medium">Batch:</span>
+            {[1, 5, 10, 25, 50].map((q) => (
+              <button
+                key={q}
+                onClick={() => setBatchQuantity(q)}
+                className={`px-2 py-0.5 rounded-lg font-mono font-bold transition ${
+                  batchQuantity === q
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {q}x
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Interactive Formula Equation Banner */}
+        <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800/90 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Material Component */}
+            <span className="px-2 py-1 rounded-lg bg-blue-950/70 border border-blue-800/80 text-blue-300">
+              ⚖️ Material: ({stats.weightGrams}g @ {materialDensity} g/cm³) × ${filamentCostPerKg}/kg = <strong>${unitMaterialCost.toFixed(2)}</strong>
+            </span>
+            <span className="text-slate-500 font-bold">+</span>
+            {/* Machine Labor Component */}
+            <span className="px-2 py-1 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-indigo-300">
+              ⏱️ Machine Labor: {stats.printTimeHours}h × ${machineLaborRate.toFixed(2)}/hr = <strong>${unitMachineLaborCost.toFixed(2)}</strong>
+            </span>
+            {includePowerInCost && (
+              <>
+                <span className="text-slate-500 font-bold">+</span>
+                <span className="px-2 py-1 rounded-lg bg-amber-950/70 border border-amber-800/80 text-amber-300">
+                  ⚡ Power: <strong>${unitPowerCost.toFixed(2)}</strong>
+                </span>
+              </>
+            )}
+            <span className="text-slate-500 font-bold">=</span>
+            {/* Total Result */}
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-black shadow-md">
+              💰 Unit Cost: ${unitProductionCost.toFixed(2)}
+            </span>
+          </div>
+
+          <span className="text-[10px] text-slate-400 font-sans flex items-center gap-1.5">
+            <span>Density:</span>
+            <strong className="text-emerald-400 font-mono bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">
+              {stats.density} g/cm³
+            </strong>
+            <span className="text-slate-300 font-medium">({activePreset?.shortName || p.material})</span>
+          </span>
+        </div>
+
+        {/* Configurable Inputs Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 pt-1">
+          {/* 1. Material Preset Dropdown & Density Control */}
+          <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label htmlFor="material-preset-select" className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Material Preset & Density</span>
+                </label>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800/80">
+                  {stats.density} g/cm³
+                </span>
+              </div>
+
+              {/* Material Preset Dropdown */}
+              <div className="relative">
+                <select
+                  id="material-preset-select"
+                  value={currentPresetId}
+                  onChange={(e) => handleMaterialPresetSelect(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer appearance-none pr-8"
+                  aria-label="Select 3D printing material preset"
+                >
+                  <optgroup label="Common / Standard Filaments">
+                    <option value="PLA">PLA (Standard / Silk) — 1.24 g/cm³</option>
+                    <option value="PLA-PLUS">PLA+ / Tough PLA — 1.25 g/cm³</option>
+                    <option value="PETG">PETG (Tough / Chemical Resistant) — 1.27 g/cm³</option>
+                    <option value="ABS">ABS (Lightweight / High Heat) — 1.05 g/cm³</option>
+                    <option value="ASA">ASA (Outdoor / UV Weatherproof) — 1.07 g/cm³</option>
+                  </optgroup>
+                  <optgroup label="Flexible Filaments">
+                    <option value="TPU-95A">TPU 95A (Flexible / Rubbery) — 1.21 g/cm³</option>
+                    <option value="TPU-85A">TPU 85A (Ultra-Soft Elastic) — 1.18 g/cm³</option>
+                  </optgroup>
+                  <optgroup label="Engineering & Composites">
+                    <option value="PC">PC (Polycarbonate High Temp) — 1.20 g/cm³</option>
+                    <option value="PA-NYLON">Nylon / PA12 (Low Friction Wear) — 1.14 g/cm³</option>
+                    <option value="PLA-CF">PLA-CF (Carbon Fiber Reinforced) — 1.29 g/cm³</option>
+                    <option value="PETG-CF">PETG-CF (Carbon Fiber Reinforced) — 1.30 g/cm³</option>
+                  </optgroup>
+                  <optgroup label="Resin & Custom">
+                    <option value="RESIN">SLA / UV Standard Photopolymer — 1.15 g/cm³</option>
+                    <option value="custom">Custom Density (User Defined)</option>
+                  </optgroup>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
+              </div>
+
+              {/* Editable Density Input and Density Diff badge */}
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <div>
+                  <span className="text-[10px] text-slate-400 block mb-0.5 font-medium">Density (g/cm³):</span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="5.0"
+                      step="0.01"
+                      value={p.materialDensity || stats.density}
+                      onChange={(e) => handleCustomDensityChange(parseFloat(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-2.5 pr-7 py-1 text-xs text-slate-100 font-mono font-bold focus:outline-none focus:border-emerald-500"
+                      title="Fine-tune material density in g/cm³"
+                    />
+                    <span className="absolute right-1.5 top-1 text-[9px] text-slate-500 pointer-events-none font-mono">
+                      g/cm³
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[9px] text-slate-400 flex flex-col justify-center">
+                  <span className="block text-slate-400">vs PLA (1.24):</span>
+                  <span className={`font-mono font-bold mt-0.5 ${
+                    stats.density < 1.23
+                      ? 'text-emerald-400'
+                      : stats.density > 1.25
+                      ? 'text-amber-400'
+                      : 'text-slate-300'
+                  }`}>
+                    {stats.density < 1.23
+                      ? `${(((stats.density - 1.24) / 1.24) * 100).toFixed(1)}% (Lighter)`
+                      : stats.density > 1.25
+                      ? `+${(((stats.density - 1.24) / 1.24) * 100).toFixed(1)}% (Heavier)`
+                      : 'Standard'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick 1-click Preset Chips for top 4 common materials */}
+            <div className="flex items-center gap-1 pt-1.5 border-t border-slate-800/80">
+              <span className="text-[10px] text-slate-500 font-medium">Presets:</span>
+              {[
+                { id: 'PLA', label: 'PLA', density: 1.24 },
+                { id: 'PETG', label: 'PETG', density: 1.27 },
+                { id: 'ABS', label: 'ABS', density: 1.05 },
+                { id: 'TPU-95A', label: 'TPU', density: 1.21 },
+              ].map((chip) => (
+                <button
+                  key={chip.id}
+                  onClick={() => handleMaterialPresetSelect(chip.id)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-mono transition border ${
+                    currentPresetId === chip.id
+                      ? 'bg-emerald-600 text-white border-emerald-400 font-bold'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                  title={`${chip.label} (${chip.density} g/cm³)`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Filament Price Per Kg Input & Presets */}
+          <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Filament Price ($/kg)</span>
+                </label>
+                <span className="text-[10px] text-blue-400 font-mono font-semibold">
+                  ${(filamentCostPerKg / 1000).toFixed(4)} / gram
+                </span>
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">$</span>
+                <input
+                  type="number"
+                  min="5"
+                  max="250"
+                  step="0.5"
+                  value={filamentCostPerKg}
+                  onChange={(e) => onChangePrintSettings({ filamentCostPerKg: Math.max(1, Number(e.target.value)) })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-7 pr-3 py-1.5 text-xs text-slate-100 font-bold font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Part Material Cost Preview */}
+              <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[9px] text-slate-400 flex items-center justify-between">
+                <span>1 Unit Raw Material:</span>
+                <span className="font-mono font-bold text-blue-300">
+                  {stats.weightGrams}g × ${(filamentCostPerKg / 1000).toFixed(4)} = ${unitMaterialCost.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Price Presets */}
+            <div className="flex items-center gap-1 pt-1.5 border-t border-slate-800/80">
+              <span className="text-[10px] text-slate-500 font-medium">Presets:</span>
+              {[
+                { label: '$16', sub: 'Budget', val: 16 },
+                { label: '$22', sub: 'Std PLA', val: 22 },
+                { label: '$28', sub: 'PETG/ABS', val: 28 },
+                { label: '$45', sub: 'CF/Nylon', val: 45 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  onClick={() => onChangePrintSettings({ filamentCostPerKg: preset.val })}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-mono transition border ${
+                    filamentCostPerKg === preset.val
+                      ? 'bg-blue-600 text-white border-blue-400 font-bold'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                  title={`${preset.sub} ($${preset.val}/kg)`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Machine Labor Hourly Rate Input & Slider */}
+          <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Hourly Machine Labor Rate</span>
+                </label>
+                <span className="text-[10px] text-indigo-300 font-mono font-semibold">
+                  ${machineLaborRate.toFixed(2)}/hour
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative w-24 shrink-0">
+                  <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="35"
+                    step="0.25"
+                    value={machineLaborRate}
+                    onChange={(e) => setMachineLaborRate(Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-6 pr-2 py-1.5 text-xs text-slate-100 font-bold font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="15"
+                  step="0.25"
+                  value={machineLaborRate}
+                  onChange={(e) => setMachineLaborRate(Number(e.target.value))}
+                  className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {/* Part Labor Cost Preview */}
+              <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[9px] text-slate-400 flex items-center justify-between">
+                <span>1 Unit Machine Labor:</span>
+                <span className="font-mono font-bold text-indigo-300">
+                  {stats.printTimeHours}h × ${machineLaborRate.toFixed(2)} = ${unitMachineLaborCost.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Labor Presets */}
+            <div className="flex items-center gap-1 pt-1.5 border-t border-slate-800/80">
+              <span className="text-[10px] text-slate-500 font-medium">Presets:</span>
+              {[
+                { label: '$0.00', sub: 'Hobby', val: 0 },
+                { label: '$1.50', sub: 'Farm', val: 1.5 },
+                { label: '$3.00', sub: 'Pro', val: 3 },
+                { label: '$6.00', sub: 'Comm', val: 6 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  onClick={() => setMachineLaborRate(preset.val)}
+                  className={`px-1.5 py-0.5 rounded-lg text-[10px] font-mono transition border ${
+                    machineLaborRate === preset.val
+                      ? 'bg-indigo-600 text-white border-indigo-400 font-bold'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                  title={`${preset.sub} ($${preset.val}/hr)`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+
+              <label className="ml-auto flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includePowerInCost}
+                  onChange={(e) => setIncludePowerInCost(e.target.checked)}
+                  className="accent-amber-500 rounded"
+                />
+                <span>Power</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Dynamic Result Tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+          {/* Tile 1: Material Cost */}
+          <div className="p-3 bg-slate-950/70 rounded-xl border border-blue-900/40">
+            <span className="text-[10px] text-blue-400 font-bold flex items-center gap-1 uppercase tracking-wider">
+              <Weight className="w-3 h-3" /> Material Cost
+            </span>
+            <div className="text-lg font-black text-slate-100 font-mono mt-1">
+              ${batchMaterialCost.toFixed(2)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              ${unitMaterialCost.toFixed(2)} / unit ({(stats.weightGrams * qty).toFixed(1)}g total)
+            </div>
+            <span className="text-[9px] text-blue-300/80 font-mono block mt-1">
+              Density: {stats.density} g/cm³ ({activePreset?.shortName || p.material})
+            </span>
+          </div>
+
+          {/* Tile 2: Machine Labor Cost */}
+          <div className="p-3 bg-slate-950/70 rounded-xl border border-indigo-900/40">
+            <span className="text-[10px] text-indigo-400 font-bold flex items-center gap-1 uppercase tracking-wider">
+              <Clock className="w-3 h-3" /> Machine Labor
+            </span>
+            <div className="text-lg font-black text-slate-100 font-mono mt-1">
+              ${batchLaborCost.toFixed(2)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              ${unitMachineLaborCost.toFixed(2)} / unit ({(stats.printTimeHours * qty).toFixed(1)} hrs)
+            </div>
+            <span className="text-[9px] text-indigo-300/80 font-mono block mt-1">
+              Rate: ${machineLaborRate.toFixed(2)}/hr
+            </span>
+          </div>
+
+          {/* Tile 3: Total Production Cost (COGS) */}
+          <div className="p-3 bg-gradient-to-br from-emerald-950/40 to-slate-950 rounded-xl border border-emerald-500/40 shadow-sm">
+            <span className="text-[10px] text-emerald-400 font-black flex items-center gap-1 uppercase tracking-wider">
+              <DollarSign className="w-3 h-3" /> Total Production Cost
+            </span>
+            <div className="text-lg font-black text-emerald-300 font-mono mt-1">
+              ${batchTotalProductionCost.toFixed(2)}
+            </div>
+            <div className="text-[10px] text-slate-300 mt-0.5 font-bold">
+              ${unitProductionCost.toFixed(2)} / unit
+            </div>
+            <span className="text-[9px] text-emerald-400/80 font-mono block mt-1">
+              {qty} piece{qty > 1 ? 's' : ''} batch
+            </span>
+          </div>
+
+          {/* Tile 4: Retail & Profit Target */}
+          <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                Retail Target
+              </span>
+              <div className="flex items-center gap-1">
+                {[2.5, 3.5, 4.0].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setTargetMarkupMultiplier(m)}
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono transition ${
+                      targetMarkupMultiplier === m
+                        ? 'bg-slate-700 text-white font-bold'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {m}x
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="text-lg font-black text-slate-100 font-mono mt-1">
+              ${(unitTargetRetail * qty).toFixed(2)}
+            </div>
+            <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+              +${(unitNetProfit * qty).toFixed(2)} Net Profit
+            </div>
+            <span className="text-[9px] text-slate-400 font-mono block mt-1">
+              {profitMarginPercent}% Net Margin
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* BAMBU LAB FLEET & AMS 4-COLOR STUDIO */}
+      <BambuLabPanel
+        design={design}
+        onUpdateBambuSettings={(newBambu) => {
+          if (onChangeBambuSettings) {
+            onChangeBambuSettings(newBambu);
+          }
+        }}
+      />
+
       {/* RECHARTS BAR CHART: MATERIAL USAGE, ENERGY COSTS & SERVICE FEES */}
       <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
@@ -662,7 +1347,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
           {/* Batch Multiplier Selector */}
           <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
             <span className="text-slate-400 px-1.5 text-[10px] font-medium">Batch:</span>
-            {[1, 5, 10, 25].map((q) => (
+            {[1, 5, 10, 25, 50].map((q) => (
               <button
                 key={q}
                 onClick={() => setBatchQuantity(q)}
@@ -723,10 +1408,22 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <Weight className="w-3 h-3" /> Raw Material
             </span>
             <p className="text-sm font-bold text-slate-100 font-mono mt-0.5">
-              ${(stats.materialCost * qty).toFixed(2)}
+              ${batchMaterialCost.toFixed(2)}
             </p>
             <span className="text-[9px] text-slate-400">
               {(stats.weightGrams * qty).toFixed(1)}g total
+            </span>
+          </div>
+
+          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 transition-all duration-300">
+            <span className="text-[10px] text-indigo-400 flex items-center gap-1 font-medium">
+              <Clock className="w-3 h-3" /> Machine Labor
+            </span>
+            <p className="text-sm font-bold text-slate-100 font-mono mt-0.5">
+              ${batchLaborCost.toFixed(2)}
+            </p>
+            <span className="text-[9px] text-slate-400">
+              ${machineLaborRate.toFixed(2)}/hr rate
             </span>
           </div>
 
@@ -735,22 +1432,10 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <Zap className="w-3 h-3" /> Energy Cost
             </span>
             <p className="text-sm font-bold text-slate-100 font-mono mt-0.5">
-              ${(stats.electricityCost * qty).toFixed(2)}
+              ${batchPowerCost.toFixed(2)}
             </p>
             <span className="text-[9px] text-slate-400">
               {(stats.electricityKwh * qty).toFixed(2)} kWh
-            </span>
-          </div>
-
-          <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 transition-all duration-300">
-            <span className="text-[10px] text-pink-400 flex items-center gap-1 font-medium">
-              <ShoppingBag className="w-3 h-3" /> Platform & Fees
-            </span>
-            <p className="text-sm font-bold text-slate-100 font-mono mt-0.5">
-              ${(stats.totalServiceFees * qty).toFixed(2)}
-            </p>
-            <span className="text-[9px] text-slate-400">
-              Etsy fees + mailer
             </span>
           </div>
 
@@ -759,10 +1444,10 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <TrendingUp className="w-3 h-3" /> Net Profit
             </span>
             <p className="text-sm font-bold text-emerald-300 font-mono mt-0.5">
-              +${(stats.netProfit * qty).toFixed(2)}
+              +${(unitNetProfit * qty).toFixed(2)}
             </p>
             <span className="text-[9px] text-emerald-400/80 font-medium">
-              {stats.profitMargin}% profit margin
+              {profitMarginPercent}% profit margin
             </span>
           </div>
         </div>
@@ -782,18 +1467,18 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
 
         <div className="space-y-0.5">
           <span className="text-[10px] text-slate-400 flex items-center gap-1">
-            <DollarSign className="w-3 h-3 text-slate-500" /> Raw Filament
+            <DollarSign className="w-3 h-3 text-slate-500" /> Material & Labor
           </span>
-          <p className="text-base font-bold text-amber-400 font-mono">${stats.materialCost}</p>
-          <span className="text-[10px] text-slate-500">COGS: ${stats.totalCogs}</span>
+          <p className="text-base font-bold text-amber-400 font-mono">${unitProductionCost.toFixed(2)}</p>
+          <span className="text-[10px] text-slate-500">Filament: ${unitMaterialCost.toFixed(2)} | Labor: ${unitMachineLaborCost.toFixed(2)}</span>
         </div>
 
         <div className="space-y-0.5">
           <span className="text-[10px] text-slate-400 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-emerald-400" /> Etsy Retail
+            <TrendingUp className="w-3 h-3 text-emerald-400" /> Target Retail
           </span>
-          <p className="text-base font-bold text-emerald-400 font-mono">${stats.recommendedRetailPrice}</p>
-          <span className="text-[10px] text-emerald-300 font-medium">+${stats.netProfit} profit</span>
+          <p className="text-base font-bold text-emerald-400 font-mono">${unitTargetRetail.toFixed(2)}</p>
+          <span className="text-[10px] text-emerald-300 font-medium">+${unitNetProfit.toFixed(2)} profit ({profitMarginPercent}%)</span>
         </div>
 
         <div className="space-y-0.5">
