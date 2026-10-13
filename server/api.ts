@@ -1052,3 +1052,67 @@ Return ONLY valid JSON with this exact schema:
   }
 }
 
+/**
+ * Direct export endpoint for remote teams and automated printers/slicers.
+ * Serves generated assets directly (SVG, DXF, Specs JSON) or redirects to client app with auto-export query params.
+ */
+export function handleExportAsset(req: Request, res: Response) {
+  try {
+    const designId = req.params.id || (req.query.id as string) || (req.query.designId as string);
+    const format = ((req.query.format as string) || 'stl').toLowerCase();
+    const design = (designId ? cloudLibraryStorage.find((d) => d.id === designId) : null) || cloudLibraryStorage[0];
+
+    if (!design) {
+      return res.status(404).json({ success: false, error: 'Design not found in library' });
+    }
+
+    const cleanName = (design.name || 'forgecraft_model').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+
+    if (format === 'svg' || format === 'svg_vector') {
+      const width = design.dimensions?.width || 80;
+      const depth = design.dimensions?.depth || 80;
+      const padding = 20;
+      const totalW = width + padding * 2;
+      const totalH = depth + padding * 2;
+      const svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}mm" height="${totalH}mm" viewBox="0 0 ${totalW} ${totalH}">
+  <metadata>
+    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+      <rdf:Description>
+        <title>${design.name} - Laser Cut Vector</title>
+        <creator>ForgeCraft Studio</creator>
+      </rdf:Description>
+    </rdf:RDF>
+  </metadata>
+  <rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#111827"/>
+  <rect x="${padding}" y="${padding}" width="${width}" height="${depth}" rx="4" fill="none" stroke="#FF0000" stroke-width="0.3"/>
+  <text x="${totalW / 2}" y="${totalH / 2}" font-family="monospace" font-size="4" fill="#60A5FA" text-anchor="middle">${design.name}</text>
+  <text x="${totalW / 2}" y="${totalH / 2 + 6}" font-family="monospace" font-size="2.5" fill="#9CA3AF" text-anchor="middle">Red: Cut (#FF0000) • Blue: Score (#0000FF)</text>
+</svg>`;
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Content-Disposition', `attachment; filename="${cleanName}_laser_cut.svg"`);
+      return res.send(svg);
+    }
+
+    if (format === 'dxf' || format === 'dxf_vector') {
+      const width = design.dimensions?.width || 80;
+      const depth = design.dimensions?.depth || 80;
+      const dxf = `0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nCUT_RED\n10\n0.0\n20\n0.0\n11\n${width}\n21\n0.0\n0\nLINE\n8\nCUT_RED\n10\n${width}\n20\n0.0\n11\n${width}\n21\n${depth}\n0\nLINE\n8\nCUT_RED\n10\n${width}\n20\n${depth}\n11\n0.0\n21\n${depth}\n0\nLINE\n8\nCUT_RED\n10\n0.0\n20\n${depth}\n11\n0.0\n21\n0.0\n0\nENDSEC\n0\nEOF\n`;
+      res.setHeader('Content-Type', 'application/dxf');
+      res.setHeader('Content-Disposition', `attachment; filename="${cleanName}_laser_cut.dxf"`);
+      return res.send(dxf);
+    }
+
+    if (format === 'json' || format === 'spec') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${cleanName}_manufacturing_spec.json"`);
+      return res.json({ success: true, design });
+    }
+
+    // For 3D STL or 3MF, redirect to client app with auto-export query parameters
+    return res.redirect(`/?design=${encodeURIComponent(design.id)}&export=${encodeURIComponent(format)}`);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+

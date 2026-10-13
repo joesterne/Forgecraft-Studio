@@ -12,6 +12,7 @@ import {
   handleSaveLibrary,
   handleDeleteLibrary,
   handleDescribeAndCreate,
+  handleExportAsset,
 } from './server/api';
 
 dotenv.config();
@@ -32,6 +33,8 @@ app.post('/api/print-quote', handlePrintQuote);
 app.get('/api/library', handleGetLibrary);
 app.post('/api/library', handleSaveLibrary);
 app.delete('/api/library/:id', handleDeleteLibrary);
+app.get('/api/export/:id', handleExportAsset);
+app.get('/api/export', handleExportAsset);
 
 // Serve static frontend in production
 const distPath = path.resolve(__dirname, 'dist');

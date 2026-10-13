@@ -21,6 +21,12 @@ import {
   Compass,
   History,
   Camera,
+  Link2,
+  Copy,
+  Check,
+  CheckCircle2,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -73,6 +79,11 @@ export default function App() {
   const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
   const [commentsTargetDesign, setCommentsTargetDesign] = useState<CADDesign | null>(null);
 
+  // Quick Share & Export States for Remote Teams & 3D Printers
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [printerTarget, setPrinterTarget] = useState<'sdcard' | 'octoprint' | 'klipper' | 'laser'>('sdcard');
+  const [shareToast, setShareToast] = useState<{ message: string; type: 'link' | 'path' | 'download' } | null>(null);
+
   // Auto-launch onboarding tour for first-time visitors
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('forgecraft_tour_completed');
@@ -91,14 +102,35 @@ export default function App() {
   // Internal geometry reference from viewport
   const currentGeometryRef = React.useRef<THREE.BufferGeometry | null>(null);
 
-  // Fetch initial library on mount
+  // Fetch initial library on mount & support remote link sharing via query params
   useEffect(() => {
     fetch('/api/library')
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.library && data.library.length > 0) {
           setLibrary(data.library);
-          setActiveDesign(data.library[0]);
+
+          const params = new URLSearchParams(window.location.search);
+          const targetDesignId = params.get('design');
+          const exportFormat = params.get('export');
+
+          if (targetDesignId) {
+            const found = data.library.find((d: CADDesign) => d.id === targetDesignId);
+            if (found) {
+              setActiveDesign(found);
+            } else {
+              setActiveDesign(data.library[0]);
+            }
+          } else {
+            setActiveDesign(data.library[0]);
+          }
+
+          if (exportFormat) {
+            window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+            setTimeout(() => {
+              triggerSharedExport(exportFormat);
+            }, 800);
+          }
         }
       })
       .catch((err) => console.error('Error fetching library:', err));
@@ -408,6 +440,160 @@ export default function App() {
     setIsExportDropdownOpen(false);
   };
 
+  // Helper to copy text with modern API and reliable fallback
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Clipboard writeText failed, using fallback', err);
+    }
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.left = '-9999px';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(el);
+      return successful;
+    } catch (err) {
+      console.error('Copy fallback failed:', err);
+      return false;
+    }
+  };
+
+  // Get clean export filename for a format
+  const getExportFilename = (format: string): string => {
+    if (!activeDesign) return 'forgecraft_model';
+    const clean = activeDesign.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    switch (format) {
+      case 'bambu3mf':
+        return `${clean}_bambu_project.3mf`;
+      case 'stl_binary':
+        return `${clean}.stl`;
+      case 'stl_ascii':
+        return `${clean}_ascii.stl`;
+      case 'svg_vector':
+        return `${clean}_laser_cut.svg`;
+      case 'dxf_vector':
+        return `${clean}_laser_cut.dxf`;
+      case 'bundle':
+        return `${clean}_bundle.zip`;
+      case 'bulk_zip':
+        return `forgecraft_bulk_designs.zip`;
+      default:
+        return `${clean}.stl`;
+    }
+  };
+
+  // Generates shareable web download deep link for remote team members
+  const getDownloadLink = (format: string): string => {
+    const origin = window.location.origin || '';
+    const path = window.location.pathname || '';
+    if (format === 'bulk_zip') {
+      return `${origin}${path}?export=bulk_zip`;
+    }
+    const designId = activeDesign?.id || 'active-design';
+    return `${origin}${path}?design=${encodeURIComponent(designId)}&export=${encodeURIComponent(format)}`;
+  };
+
+  // Generates printer-calibrated filesystem / queue path
+  const getFilePath = (format: string, target = printerTarget): string => {
+    const filename = getExportFilename(format);
+    switch (target) {
+      case 'octoprint':
+        return `/home/pi/.octoprint/uploads/${filename}`;
+      case 'klipper':
+        return `/home/pi/printer_data/gcodes/${filename}`;
+      case 'laser':
+        return `/laser/jobs/${filename}`;
+      case 'sdcard':
+      default:
+        return `/sdcard/models/${filename}`;
+    }
+  };
+
+  // 1-Click Copy Download Link
+  const handleCopyDownloadLink = async (format: string, formatLabel: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const link = getDownloadLink(format);
+    const ok = await copyTextToClipboard(link);
+    if (ok) {
+      const key = `${format}-link`;
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((prev) => (prev === key ? null : prev)), 2500);
+      setShareToast({
+        message: `Copied download link for ${formatLabel}! Share with remote teams for 1-click model download.`,
+        type: 'link',
+      });
+      setTimeout(() => setShareToast(null), 3500);
+    }
+  };
+
+  // 1-Click Copy File Path
+  const handleCopyFilePath = async (format: string, formatLabel: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const path = getFilePath(format);
+    const ok = await copyTextToClipboard(path);
+    if (ok) {
+      const key = `${format}-path`;
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((prev) => (prev === key ? null : prev)), 2500);
+      setShareToast({
+        message: `Copied printer file path (${path})! Ready for OctoPrint, Klipper, or SD card.`,
+        type: 'path',
+      });
+      setTimeout(() => setShareToast(null), 3500);
+    }
+  };
+
+  // Automatically triggers export from URL parameters
+  const triggerSharedExport = (format: string) => {
+    switch (format) {
+      case 'bambu3mf':
+      case '3mf':
+        handleExportBambu3MF();
+        setShareToast({ message: '🚀 Automatically downloaded Bambu .3MF project from shared link!', type: 'download' });
+        break;
+      case 'stl_binary':
+      case 'stl':
+        handleExportSTL(true);
+        setShareToast({ message: '🚀 Automatically downloaded .STL (Binary) from shared link!', type: 'download' });
+        break;
+      case 'stl_ascii':
+        handleExportSTL(false);
+        setShareToast({ message: '🚀 Automatically downloaded .STL (ASCII) from shared link!', type: 'download' });
+        break;
+      case 'svg':
+      case 'svg_vector':
+        handleExportSVG();
+        setShareToast({ message: '🚀 Automatically downloaded .SVG Laser vector from shared link!', type: 'download' });
+        break;
+      case 'dxf':
+      case 'dxf_vector':
+        handleExportDXF();
+        setShareToast({ message: '🚀 Automatically downloaded .DXF CAD vector from shared link!', type: 'download' });
+        break;
+      case 'bundle':
+        handleExportBundle();
+        setShareToast({ message: '🚀 Automatically downloaded model bundle from shared link!', type: 'download' });
+        break;
+      case 'bulk_zip':
+        setIsLibraryOpen(true);
+        setShareToast({ message: '🚀 Opened Cloud Library for bulk export from shared link!', type: 'download' });
+        break;
+      default:
+        handleExportSTL(true);
+        break;
+    }
+    setTimeout(() => setShareToast(null), 4000);
+  };
+
   if (!activeDesign) {
     return (
       <div className="min-h-screen bg-[#0d1017] flex items-center justify-center text-slate-300">
@@ -585,97 +771,246 @@ export default function App() {
             <span className="hidden lg:inline">Tour</span>
           </button>
 
-          {/* Export Dropdown */}
+          {/* Export & Remote Share Dropdown */}
           <div id="tour-export-button" className="relative">
             <button
               onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg transition"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export</span>
-              <ChevronDown className="w-3 h-3 ml-0.5" />
+              <ChevronDown className={`w-3 h-3 ml-0.5 transition-transform duration-200 ${isExportDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isExportDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 space-y-1">
-                {/* 1-Click Official Bambu Studio 3MF Project */}
-                <button
-                  onClick={handleExportBambu3MF}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-200 font-semibold flex items-center justify-between border border-emerald-500/40 transition shadow-sm"
-                  title="Official Bambu Studio & OrcaSlicer project file with tuned layer profile and AMS 4-color mapping"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="font-bold text-white">Bambu Studio (.3MF)</span>
+              <>
+                {/* Backdrop to dismiss on outside click */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsExportDropdownOpen(false)}
+                />
+
+                <div className="absolute right-0 mt-2 w-[360px] sm:w-[410px] bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-3 z-50 space-y-2.5 max-h-[85vh] overflow-y-auto">
+                  {/* Dropdown Header & Remote Share Context */}
+                  <div className="flex items-start justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                        <h4 className="text-xs font-bold text-white tracking-wide">Export & Remote Share Hub</h4>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Download locally or copy links & paths for remote teams & 3D printers
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsExportDropdownOpen(false)}
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                      title="Close Export Menu"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <span className="text-[10px] bg-emerald-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono">
-                    X1/P1/A1
-                  </span>
-                </button>
 
-                <div className="w-full h-px bg-slate-800 my-1" />
-
-                <button
-                  onClick={() => handleExportSTL(true)}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-200 flex items-center justify-between transition"
-                >
-                  <span className="font-semibold text-white">Download .STL (Binary)</span>
-                  <span className="text-[10px] text-blue-400 font-mono">Standard CAD</span>
-                </button>
-
-                <button
-                  onClick={() => handleExportSTL(false)}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-300 flex items-center justify-between transition"
-                >
-                  <span>Download .STL (ASCII)</span>
-                  <span className="text-[10px] text-slate-500 font-mono">Text CAD</span>
-                </button>
-
-                <div className="w-full h-px bg-slate-800 my-1" />
-
-                <button
-                  onClick={handleExportSVG}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-rose-300 flex items-center justify-between transition"
-                >
-                  <span className="font-semibold">Download .SVG Vector</span>
-                  <span className="text-[10px] text-rose-400 font-mono">Laser Cut</span>
-                </button>
-
-                <button
-                  onClick={handleExportDXF}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-300 flex items-center justify-between transition"
-                >
-                  <span>Download .DXF Vector</span>
-                  <span className="text-[10px] text-slate-400 font-mono">AutoCAD/CNC</span>
-                </button>
-
-                <div className="w-full h-px bg-slate-800 my-1" />
-
-                <button
-                  onClick={handleExportBundle}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 font-semibold flex items-center gap-2 transition"
-                >
-                  <FileArchive className="w-3.5 h-3.5" />
-                  <span>Export Single (.STL+.SVG)</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setIsExportDropdownOpen(false);
-                    setIsLibraryOpen(true);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs rounded-lg bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-300 font-semibold flex items-center justify-between transition"
-                  title="Select multiple designs in Cloud Library to create a combined ZIP archive"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <FileArchive className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Bulk Export ZIP</span>
+                  {/* Printer Path Target Preset Selector */}
+                  <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-slate-300">Target Printer Path Preset:</span>
+                      <span className="font-mono text-amber-400/90 text-[9px] truncate max-w-[190px]">
+                        {printerTarget === 'sdcard' && '/sdcard/models/...'}
+                        {printerTarget === 'octoprint' && '~/.octoprint/uploads/...'}
+                        {printerTarget === 'klipper' && '~/printer_data/gcodes/...'}
+                        {printerTarget === 'laser' && '/laser/jobs/...'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 text-[10px]">
+                      {[
+                        { id: 'sdcard', label: 'SD Card' },
+                        { id: 'octoprint', label: 'OctoPrint' },
+                        { id: 'klipper', label: 'Klipper' },
+                        { id: 'laser', label: 'Laser/CNC' },
+                      ].map((tgt) => (
+                        <button
+                          key={tgt.id}
+                          onClick={() => setPrinterTarget(tgt.id as any)}
+                          className={`px-1.5 py-1 rounded-lg font-medium transition text-center truncate ${
+                            printerTarget === tgt.id
+                              ? 'bg-blue-600 text-white font-bold shadow-sm'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          {tgt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <span className="text-[10px] bg-indigo-900/80 px-1.5 py-0.5 rounded font-mono text-indigo-200">
-                    {library.length} models
-                  </span>
-                </button>
-              </div>
+
+                  {/* Export Options List with 1-Click Download, Copy Link, and Copy Path Buttons */}
+                  <div className="space-y-1.5">
+                    {[
+                      {
+                        key: 'bambu3mf',
+                        name: 'Bambu Studio (.3MF)',
+                        desc: 'Official X1/P1/A1 project file with AMS 4-color profile',
+                        badge: 'X1/P1/A1',
+                        badgeColor: 'bg-emerald-950 text-emerald-300 border-emerald-800/80',
+                        icon: Printer,
+                        iconColor: 'text-emerald-400 bg-emerald-500/10',
+                        onDownload: handleExportBambu3MF,
+                      },
+                      {
+                        key: 'stl_binary',
+                        name: 'Download .STL (Binary)',
+                        desc: 'Standard CAD mesh for Bambu, Prusa, Cura, Orca',
+                        badge: 'Standard CAD',
+                        badgeColor: 'bg-blue-950 text-blue-300 border-blue-800/80',
+                        icon: Box,
+                        iconColor: 'text-blue-400 bg-blue-500/10',
+                        onDownload: () => handleExportSTL(true),
+                      },
+                      {
+                        key: 'stl_ascii',
+                        name: 'Download .STL (ASCII)',
+                        desc: 'Human-readable text CAD with facet normal list',
+                        badge: 'Text CAD',
+                        badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
+                        icon: FileCode,
+                        iconColor: 'text-slate-400 bg-slate-700/30',
+                        onDownload: () => handleExportSTL(false),
+                      },
+                      {
+                        key: 'svg_vector',
+                        name: 'Download .SVG Vector',
+                        desc: 'Laser Cut & Engrave vector (Cut, Score, Engrave)',
+                        badge: 'Laser Cut',
+                        badgeColor: 'bg-rose-950 text-rose-300 border-rose-800/80',
+                        icon: Flame,
+                        iconColor: 'text-rose-400 bg-rose-500/10',
+                        onDownload: handleExportSVG,
+                      },
+                      {
+                        key: 'dxf_vector',
+                        name: 'Download .DXF Vector',
+                        desc: 'AutoCAD & CNC router 2D path geometry',
+                        badge: 'AutoCAD/CNC',
+                        badgeColor: 'bg-amber-950 text-amber-300 border-amber-800/80',
+                        icon: Layers,
+                        iconColor: 'text-amber-400 bg-amber-500/10',
+                        onDownload: handleExportDXF,
+                      },
+                      {
+                        key: 'bundle',
+                        name: 'Export Single (.STL + .SVG)',
+                        desc: 'Combined 3D print mesh + laser vector package',
+                        badge: 'Bundle',
+                        badgeColor: 'bg-indigo-950 text-indigo-300 border-indigo-800/80',
+                        icon: FileArchive,
+                        iconColor: 'text-indigo-400 bg-indigo-500/10',
+                        onDownload: handleExportBundle,
+                      },
+                      {
+                        key: 'bulk_zip',
+                        name: 'Bulk Export ZIP',
+                        desc: `Multi-design bundle from Cloud Library (${library.length} models)`,
+                        badge: `${library.length} models`,
+                        badgeColor: 'bg-cyan-950 text-cyan-300 border-cyan-800/80',
+                        icon: FileArchive,
+                        iconColor: 'text-cyan-400 bg-cyan-500/10',
+                        onDownload: () => {
+                          setIsExportDropdownOpen(false);
+                          setIsLibraryOpen(true);
+                        },
+                      },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      const isLinkCopied = copiedKey === `${item.key}-link`;
+                      const isPathCopied = copiedKey === `${item.key}-path`;
+
+                      return (
+                        <div
+                          key={item.key}
+                          className="p-2 bg-slate-800/40 hover:bg-slate-800/70 rounded-xl border border-slate-700/50 hover:border-slate-600 transition space-y-2 group"
+                        >
+                          {/* Top Row: Info & Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`p-1.5 rounded-lg ${item.iconColor} shrink-0`}>
+                                <Icon className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="truncate">
+                                <span className="font-semibold text-xs text-white block truncate">
+                                  {item.name}
+                                </span>
+                                <span className="text-[10px] text-slate-400 block truncate">
+                                  {item.desc}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${item.badgeColor}`}>
+                              {item.badge}
+                            </span>
+                          </div>
+
+                          {/* Action Buttons Row: Download | Copy Link | Copy Path */}
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-slate-700/40">
+                            <button
+                              onClick={item.onDownload}
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white text-[11px] font-bold shadow-sm transition active:scale-[0.98]"
+                              title={`Download ${item.name} directly to browser`}
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Download</span>
+                            </button>
+
+                            <button
+                              onClick={(e) => handleCopyDownloadLink(item.key, item.name, e)}
+                              className={`flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition ${
+                                isLinkCopied
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500/80 shadow-sm'
+                                  : 'bg-slate-900 hover:bg-slate-750 text-cyan-300 hover:text-cyan-200 border-cyan-500/30 hover:border-cyan-500/60'
+                              }`}
+                              title="Copy download link for remote teams or external slicers"
+                            >
+                              {isLinkCopied ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="font-semibold text-emerald-300">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Link2 className="w-3 h-3 text-cyan-400" />
+                                  <span>Copy Link</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={(e) => handleCopyFilePath(item.key, item.name, e)}
+                              className={`flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition ${
+                                isPathCopied
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500/80 shadow-sm'
+                                  : 'bg-slate-900 hover:bg-slate-750 text-amber-300 hover:text-amber-200 border-amber-500/30 hover:border-amber-500/60'
+                              }`}
+                              title={`Copy printer queue path (${getFilePath(item.key)})`}
+                            >
+                              {isPathCopied ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="font-semibold text-emerald-300">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3 text-amber-400" />
+                                  <span>Copy Path</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1059,6 +1394,31 @@ export default function App() {
         onClose={() => setIsTourOpen(false)}
         onTabChange={(tab) => setActiveTab(tab)}
       />
+
+      {/* Quick Share / Export Toast Notification */}
+      {shareToast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-md bg-slate-900/95 border border-cyan-500/50 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0 border border-cyan-500/20">
+            {shareToast.type === 'link' ? (
+              <Link2 className="w-4 h-4 text-cyan-400" />
+            ) : shareToast.type === 'path' ? (
+              <Copy className="w-4 h-4 text-amber-400" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            )}
+          </div>
+          <div className="flex-1 text-xs">
+            <p className="font-semibold text-slate-100">{shareToast.message}</p>
+          </div>
+          <button
+            onClick={() => setShareToast(null)}
+            className="p-1 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition"
+            title="Dismiss notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

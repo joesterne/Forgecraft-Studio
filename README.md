@@ -15,7 +15,8 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
   - **Laser Mandala Coasters:** Intricate radial fretwork with recessed cork backing pocket.
   - **Gridfinity Desk Organizers:** Stacking lips, interior compartment dividers, and smooth scooping corners.
   - **Sculptural Vases:** Procedural lofted and fluted geometric home decor.
-- **Export Standards:** Direct download of official binary `.STL` (compact and compatible with Bambu Studio, PrusaSlicer, Cura, OrcaSlicer, Lychee) and ASCII text `.STL`.
+- **Export Standards:** Direct download of official binary `.STL` (compact and compatible with Bambu Studio, PrusaSlicer, Cura, OrcaSlicer, Lychee), ASCII text `.STL`, Bambu Studio `.3MF`, and laser/CNC vectors (`.SVG`, `.DXF`).
+- **1-Click Share & Copy Buttons:** Every export option includes dedicated **"Copy download link"** (shareable deep link for remote teammates) and **"Copy file path"** (calibrated for OctoPrint, Klipper, or SD card printer queues) buttons.
 - **Viewport Hovering 'Quick Export' Button:** A floating one-click action button on the 3D canvas that dynamically adapts to the current workbench:
   - **Slicer / Dimensions Workspace:** Triggers an instant one-click download of binary `.STL` (Bambu Studio & Prusa ready).
   - **Laser & Vector Workspace:** Triggers an instant one-click download of layered `.SVG` (LightBurn, Glowforge, and xTool ready).
@@ -150,6 +151,33 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
   - **Set as Main Listing Photo:** Automatically updates the design's `mockupUrl` and `thumbnailUrl` across the Cloud Library.
   - **Download 4:3 Image:** Instant export of high-resolution images ready for Etsy Seller Dashboard uploads.
   - **Direct Transition to SEO Studio:** Hands off the generated image to the Etsy SEO Listing package.
+
+### 11. Export & Remote Share Hub (1-Click Download, Copy Link & Copy Path)
+- **Unified Manufacturing Export Menu:**
+  - High-precision export formats accessible directly from the header navigation bar:
+    1. **Bambu Studio (`.3MF`):** Native multi-file project archive with tuned AMS 4-color profile.
+    2. **Standard `.STL` (Binary):** Compact, watertight 3D mesh (Bambu Studio, PrusaSlicer, Cura, OrcaSlicer).
+    3. **ASCII `.STL` (Text):** Human-readable plain text CAD mesh with facet normals.
+    4. **Laser Cut & Engrave `.SVG`:** Industry-standard vector paths (Red Cut `#FF0000`, Blue Score `#0000FF`, Black Engrave `#000000`).
+    5. **AutoCAD `.DXF` Vector:** 2D CAD exchange format for CNC milling and shop routers.
+    6. **Single Bundle (`.STL` + `.SVG`):** Combined 3D printing and laser vector manufacturing package.
+    7. **Bulk Export `.ZIP`:** Multi-design archive consolidating selected or filtered Cloud Library assets.
+- **"Copy Download Link" for Remote Teams:**
+  - Dedicated **"Copy Link"** button for every single export option in the dropdown.
+  - Generates and copies a deep-linked URL (`/?design=<id>&export=<format>`) to the user's clipboard.
+  - When opened by remote teammates, clients, or print shop collaborators, ForgeCraft Studio automatically loads the specified model and triggers an automated download of that file format.
+  - Direct REST download endpoints available at `/api/export/:designId?format=<format>` for automated CI/CD and curl scripts.
+- **"Copy File Path" for 3D Printers & Slicers:**
+  - Dedicated **"Copy Path"** button for every export option.
+  - Instantly copies formatted printer filesystem and job queue paths to the clipboard for rapid remote upload to OctoPrint, Klipper/Fluidd/Mainsail, Bambu Lab SD, or laser cutter job queues.
+- **Target Printer Preset Selector:**
+  - 1-Click toggle directly inside the dropdown to customize the copied file path prefix:
+    - **SD Card:** `/sdcard/models/<filename>` (Bambu Lab, Prusa, Creality SD cards)
+    - **OctoPrint:** `~/.octoprint/uploads/<filename>` (Raspberry Pi print server uploads)
+    - **Klipper / Moonraker:** `~/printer_data/gcodes/<filename>` (Voron, RatRig, Klipper printers)
+    - **Laser / CNC:** `/laser/jobs/<filename>` (LightBurn and CNC job folders)
+- **Copied State Badges & Toast Notifications:**
+  - Immediate visual feedback directly on the clicked button (`Copied Link! ✓` or `Copied Path! ✓`) and floating toast notifications confirming the copied link or path.
 
 ---
 

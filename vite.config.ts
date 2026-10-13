@@ -14,6 +14,7 @@ import {
   handleSaveLibrary,
   handleDeleteLibrary,
   handleDescribeAndCreate,
+  handleExportAsset,
 } from './server/api';
 
 function apiPlugin(): Plugin {
@@ -33,6 +34,8 @@ function apiPlugin(): Plugin {
       app.get('/api/library', handleGetLibrary);
       app.post('/api/library', handleSaveLibrary);
       app.delete('/api/library/:id', handleDeleteLibrary);
+      app.get('/api/export/:id', handleExportAsset);
+      app.get('/api/export', handleExportAsset);
 
       server.middlewares.use(app);
     },
