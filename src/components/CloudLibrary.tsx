@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FolderKanban,
   Search,
@@ -23,6 +23,8 @@ import {
   FileCheck,
   MessageSquare,
   Pin,
+  Filter,
+  ChevronDown,
 } from 'lucide-react';
 import { CADDesign } from '../types/cad';
 import {
@@ -58,22 +60,67 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
   onClose,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedTag, setSelectedTag] = useState<string>('All');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExportingZip, setIsExportingZip] = useState(false);
   const [zipProgress, setZipProgress] = useState<{ percent: number; step: string } | null>(null);
 
-  // Extract all unique tags
-  const allTags = ['All', ...Array.from(new Set(library.flatMap((d) => d.tags || [])))];
+  // Extract all unique categories / niches dynamically
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set<string>();
+    library.forEach((d) => {
+      if (d.category && d.category.trim()) {
+        cats.add(d.category.trim());
+      }
+    });
+    return Array.from(cats).sort();
+  }, [library]);
 
-  const filteredDesigns = library.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTag = selectedTag === 'All' || item.tags?.includes(selectedTag);
-    return matchesSearch && matchesTag;
-  });
+  // Compute category item counts
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: library.length };
+    library.forEach((d) => {
+      const cat = d.category?.trim();
+      if (cat) {
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [library]);
+
+  // Extract all unique tags
+  const allTags = useMemo(() => {
+    return ['All', ...Array.from(new Set(library.flatMap((d) => d.tags || [])))];
+  }, [library]);
+
+  const filteredDesigns = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return library.filter((item) => {
+      const matchesSearch =
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query) ||
+        (item.tags && item.tags.some((t) => t.toLowerCase().includes(query)));
+
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        item.category.trim().toLowerCase() === selectedCategory.trim().toLowerCase();
+
+      const matchesTag = selectedTag === 'All' || item.tags?.includes(selectedTag);
+
+      return matchesSearch && matchesCategory && matchesTag;
+    });
+  }, [library, searchTerm, selectedCategory, selectedTag]);
+
+  const hasActiveFilters = searchTerm.trim() !== '' || selectedCategory !== 'All' || selectedTag !== 'All';
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('All');
+    setSelectedTag('All');
+  };
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -200,55 +247,164 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
           </div>
         </div>
 
-        {/* Search, Tag Filter, and Bulk Selection Action Bar */}
-        <div className="p-4 border-b border-slate-800/80 bg-slate-950/40 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search designs by title, tags, or category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-              />
+        {/* Search, Category Filter Dropdown, Tag Filter, and Bulk Selection Action Bar */}
+        <div className="p-4 border-b border-slate-800/80 bg-slate-950/50 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Search Bar & Category Filter Controls */}
+            <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search designs by name or niche..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition shadow-inner"
+                  title="Search by design name, niche category, tags, or description"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200 transition"
+                    title="Clear search input"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Category / Niche Filter Dropdown */}
+              <div className="relative shrink-0">
+                <div className="relative flex items-center">
+                  <div className="absolute left-2.5 pointer-events-none text-cyan-400">
+                    <Filter className="w-3.5 h-3.5" />
+                  </div>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className={`rounded-xl pl-8 pr-7 py-2 text-xs font-semibold border appearance-none cursor-pointer transition shadow-inner focus:outline-none focus:ring-1 ${
+                      selectedCategory !== 'All'
+                        ? 'bg-cyan-950/70 text-cyan-200 border-cyan-500/70 focus:ring-cyan-500/40'
+                        : 'bg-slate-800/90 hover:bg-slate-800 text-slate-200 border-slate-700/80 hover:border-slate-600 focus:border-cyan-500/70 focus:ring-cyan-500/20'
+                    }`}
+                    title="Filter designs by product category / niche"
+                  >
+                    <option value="All" className="bg-slate-900 text-slate-200">
+                      All Niches / Categories ({library.length})
+                    </option>
+                    {uniqueCategories.map((cat) => (
+                      <option key={cat} value={cat} className="bg-slate-900 text-slate-200">
+                        {cat} ({categoryCounts[cat] || 0})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Reset Filters Quick Button if active */}
+              {hasActiveFilters && (
+                <button
+                  onClick={resetFilters}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-rose-300 hover:text-rose-200 text-xs border border-rose-500/30 hover:border-rose-500/50 transition shrink-0"
+                  title="Reset search and all active filters"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              )}
+
+              {/* Select All Checkbox / Toggle */}
+              <button
+                onClick={allFilteredSelected ? clearSelection : selectAll}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition shrink-0 ${
+                  allFilteredSelected
+                    ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/60'
+                    : 'bg-slate-800/90 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-600'
+                }`}
+                title={allFilteredSelected ? 'Deselect all visible designs' : 'Select all visible designs'}
+              >
+                {allFilteredSelected ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-slate-400" />
+                )}
+                <span>{allFilteredSelected ? 'All Selected' : 'Select All'}</span>
+              </button>
             </div>
 
-            {/* Select All Checkbox / Toggle */}
-            <button
-              onClick={allFilteredSelected ? clearSelection : selectAll}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition ${
-                allFilteredSelected
-                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/60'
-                  : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
-              }`}
-              title={allFilteredSelected ? 'Deselect all visible designs' : 'Select all visible designs'}
-            >
-              {allFilteredSelected ? (
-                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
-              ) : (
-                <Square className="w-3.5 h-3.5 text-slate-400" />
-              )}
-              <span>{allFilteredSelected ? 'All Selected' : 'Select All'}</span>
-            </button>
+            {/* Tags */}
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-none">
+              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider shrink-0 mr-0.5">
+                Tags:
+              </span>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => setSelectedTag(tag)}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg whitespace-nowrap font-medium transition ${
+                    selectedTag === tag
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Tags */}
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => setSelectedTag(tag)}
-                className={`px-3 py-1.5 text-xs rounded-xl whitespace-nowrap font-medium transition ${
-                  selectedTag === tag
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
+          {/* Active Filter Summary Strip (if filters are active) */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800/80">
+              <span className="text-[11px] font-mono text-slate-500 shrink-0">Active Filters:</span>
+              <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                {searchTerm && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-950/70 text-blue-300 border border-blue-800/60 text-[11px]">
+                    <Search className="w-3 h-3 text-blue-400" />
+                    <span>"{searchTerm}"</span>
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="hover:text-blue-100 ml-0.5"
+                      title="Clear search term"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedCategory !== 'All' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-950/70 text-cyan-300 border border-cyan-800/60 text-[11px]">
+                    <Filter className="w-3 h-3 text-cyan-400" />
+                    <span>Niche: {selectedCategory}</span>
+                    <button
+                      onClick={() => setSelectedCategory('All')}
+                      className="hover:text-cyan-100 ml-0.5"
+                      title="Clear category filter"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedTag !== 'All' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-950/70 text-indigo-300 border border-indigo-800/60 text-[11px]">
+                    <Tag className="w-3 h-3 text-indigo-400" />
+                    <span>Tag: #{selectedTag}</span>
+                    <button
+                      onClick={() => setSelectedTag('All')}
+                      className="hover:text-indigo-100 ml-0.5"
+                      title="Clear tag filter"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                <span className="text-[11px] font-mono text-slate-400 ml-auto shrink-0">
+                  Showing {filteredDesigns.length} of {library.length} designs
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Multi-Select Floating Action Banner (When >= 1 selected, or Bulk Export Trigger) */}
@@ -325,7 +481,29 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
 
         {/* Design Grid List */}
         <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredDesigns.map((design) => {
+          {filteredDesigns.length === 0 ? (
+            <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
+              <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-slate-400 mb-3">
+                <Search className="w-8 h-8 opacity-40 text-cyan-400" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-200">No matching designs found</h4>
+              <p className="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
+                {hasActiveFilters
+                  ? `No models match your search "${searchTerm || ''}"${selectedCategory !== 'All' ? ` in niche "${selectedCategory}"` : ''}${selectedTag !== 'All' ? ` with tag "#${selectedTag}"` : ''}. Try broadening your search or resetting filters.`
+                  : 'Your Cloud Design Library is empty.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={resetFilters}
+                  className="mt-4 px-3.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-xs font-semibold text-blue-300 border border-blue-500/40 transition flex items-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Search & Filters</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredDesigns.map((design) => {
             const isActive = design.id === activeDesignId;
             const isSelected = selectedIds.has(design.id);
 
@@ -539,7 +717,8 @@ export const CloudLibrary: React.FC<CloudLibraryProps> = ({
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </div>
     </div>

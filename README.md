@@ -69,7 +69,11 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
   - **Version Stamping:** Automatically stamps notes with the active design revision (e.g., `v1`, `v2`, `v3`) to maintain an audit trail across geometric modifications.
   - **Pin to Top & Resolution Tracking:** Pin high-priority maker warnings or mark action items as resolved.
   - **Cloud Library Badges:** Cards display live note counts, open action item counters, and prominent preview callouts for pinned team directives.
-  - **Quick Starter Templates:** 1-click templates for print test logs, wall adjustments, tolerance warnings, and Etsy buyer requests.
+- **Instant Search & Category / Niche Filter Dropdown:**
+  - Real-time search bar that filters designs instantly by title, niche, description, and hashtags with 1-click clear button.
+  - Category / Niche filter dropdown dynamically populated from active and cloud-saved designs (e.g., *Home Decor*, *Personalized Gifts*, *Craft & Baking*, *Laser Engraved*) with live item count badges.
+  - Active filter indicator strip displaying active query pills with 1-click removal and a quick "Reset Search & Filters" button.
+  - Contextual empty state with helpful guidance and quick reset trigger when no models match the search or category filters.
 - **Bulk Multi-Select ZIP Archive:** Select multiple models from the Cloud Library to generate and download a single consolidated `.ZIP` bundle (powered by JSZip) containing:
   - High-precision binary `.STL` files (Bambu Lab, Prusa, Cura, Orca ready)
   - Color-coded laser cutting & engraving `.SVG` vector files (Cut, Score, Engrave)
