@@ -28,35 +28,35 @@ ForgeCraft Studio is a parametric 3D CAD generator and precision vector manufact
 - **Gemini Live Spoken Audio Feedback:** Synthesizes spoken voice confirmation using `gemini-3.8-flash-lite-tts`, explaining dimensions, manufacturing recommendations, and estimated retail price.
 - **Interactive Copilot Chat (`ForgeCopilot`):** In-studio AI engineer supporting conversational model mutations (e.g. *"make it 15mm taller"* or *"change the text to EMMA"*).
 
-### 3. Material Weight Estimator & Recharts Print Optimizer
-- **Live Gram Weight Calculation:** Computes part weight in grams using physical volume integration:
-  $$\text{Part Weight (g)} = \text{Total Displaced Volume } (\text{cm}^3) \times \text{Material Density } (\text{g/cm}^3)$$
-- **Material Density Comparison:** Real-time side-by-side weight comparisons:
-  - **PLA / PLA Pro:** $1.24\text{ g/cm}^3$ (Standard eco-friendly filament)
-  - **PETG Tough:** $1.27\text{ g/cm}^3$ ($+2.4\%$ heavier than PLA)
-  - **ABS / ASA:** $1.05\text{ g/cm}^3$ ($-15.3\%$ lighter than PLA)
-  - **TPU 95A:** $1.21\text{ g/cm}^3$ (Flexible impact elastomer)
-  - **SLA Resin:** $1.15\text{ g/cm}^3$ (High-detail photopolymer)
-- **Print Cost Calculator (Material Density × Filament Price + Hourly Machine Labor):**
-  - **Dynamic Cost Engine:** Directly multiplies estimated part weight in grams (calculated using true physical material density: PLA $1.24\text{ g/cm}^3$, PETG $1.27\text{ g/cm}^3$, ABS $1.05\text{ g/cm}^3$, TPU $1.21\text{ g/cm}^3$, Resin $1.15\text{ g/cm}^3$) by a user-defined filament price per kg ($\$5 - \$250/\text{kg}$).
-  - **Configurable Machine Labor Rate:** Dynamically computes total machine run cost by multiplying print hours by a configurable hourly machine labor rate ($\$0.00 - \$35.00/\text{hr}$ with quick presets for Hobby $\$0/\text{hr}$, Print Farm $\$1.50/\text{hr}$, Prosumer $\$3.00/\text{hr}$, and Commercial Shop $\$6.00/\text{hr}$).
-  - **Interactive Formula Banner:** Displays live mathematical breakdown: $[ (\text{Weight}/1000) \times \$_{\text{kg}} ] + [ \text{Hours} \times \$_{\text{hr}} ] + \text{Power} = \text{Unit Cost}$.
-  - **Batch Production Scaling:** Simulates multi-unit farm runs ($1\times, 5\times, 10\times, 25\times, 50\times$) with total batch material, total machine time, total COGS, and targeted retail profit margins.
-- **Animated Recharts Production & Cost Visualizer:**
-  - **Reactive Entrance Animations:** Bars smoothly animate upward from the baseline with an `ease-out` curve whenever print settings (layer height, infill %, wall loops, spool cost, labor rate, batch multiplier) are updated.
-  - **Comprehensive Resource Breakdown:**
-    - **Material Usage** (Blue): Raw filament/resin cost calculated from total grams and spool price per kg.
-    - **Energy Costs** (Amber): 3D printer electricity consumption calculated from print time and power draw ($\sim120\text{W}$ at $\$0.15/\text{kWh}$).
-    - **Service Fees** (Pink): Marketplace transaction fees ($6.5\%$), payment processing ($3\% + \$0.20$), and packaging/shipping mailers.
-    - **Net Profit** (Emerald): Take-home maker profit margin.
-  - **Interactive Tooltip:** Hover inspection showing exact dollar amounts, metric units (grams, kWh), and percentage of retail revenue.
-  - **Batch Multiplier Selector:** Live toggle between 1x, 5x, 10x, and 25x units to simulate wholesale runs.
+### 3. Filament Weight & Cost Estimation Calculator ('Slicer' Tab)
+- **Live Filament Weight & Length Calculation:**
+  - Computes total model weight in grams using physical bounding box and shell-to-infill volume integration:
+    $$\text{Part Weight (g)} = \text{Total Part Volume } (\text{cm}^3) \times \text{Material Density } (\text{g/cm}^3)$$
+  - **1.75mm FDM Filament Length Estimation:** Calculates equivalent spool extrusion length in meters based on circular cross-sectional area:
+    $$\text{Filament Length (m)} = \frac{\text{Total Part Volume } (\text{cm}^3)}{\pi \times (0.0875\text{ cm})^2 \times 100\text{ cm/m}} \approx \frac{\text{Total Part Volume } (\text{cm}^3)}{2.405}$$
+  - **Shell vs. Infill Breakdown:** Separately tallies solid perimeter shells (wall thickness, loops) versus internal infill volume and grams.
+- **Model Dimensions & Infill Drivers:**
+  - Real-time reactivity to current design dimensions ($X \times Y \times Z\text{ mm}$), bounding box volume, and wall shell thickness with on-canvas quick nudges.
+  - Interactive Infill Density slider ($0\% - 100\%$) with 1-click presets ($0\%\text{ Hollow}$, $15\%\text{ Eco}$, $20\%\text{ Standard}$, $40\%\text{ Heavy}$, $100\%\text{ Solid}$).
+  - Infill pattern selection (**Gyroid** for watertight planters, **Grid** for maximum speed, **Honeycomb** for torsional rigidity) and wall loop counts ($2\times, 3\times, 4\times, 5\times$).
+- **Print Time Estimation:**
+  - Computes total print duration in hours and minutes using layer height slicing count ($Z / \text{layer\_height}$) combined with modern CoreXY volumetric flow rate extrusion ($\sim12\text{mm}^3/\text{s}$) plus bed heating and homing calibration ($\sim3\text{ mins}$).
+- **Material Presets & Cost Engine:**
+  - **12+ Material Presets:** Dropdown with calibrated densities and pricing for standard PLA ($1.24\text{ g/cm}^3$), PLA+ ($1.25$), PETG ($1.27$), ABS ($1.05$), ASA ($1.07$), TPU 95A ($1.21$), TPU 85A ($1.18$), PC ($1.20$), Nylon PA12 ($1.14$), PLA-CF ($1.29$), PETG-CF ($1.30$), SLA Resin ($1.15$), and custom user densities.
+  - **Configurable Machine Labor Rate & Energy:** Computes machine time cost ($\$0.00 - \$35.00/\text{hr}$) and electricity draw ($\sim120\text{W}$ at $\$0.15/\text{kWh}$).
+  - **Batch Production Scaling:** Simulates multi-unit production runs ($1\times, 5\times, 10\times, 25\times, 50\times$) with total batch material, machine time, COGS, and targeted retail profit margins.
+  - **1kg Spool Yield:** Calculates exact number of finished parts producible from a single $1\text{kg}$ ($1000\text{g}$) spool and percentage of spool consumed per part.
+- **Pre-Export Estimation Audit & 1-Click Export Hub ("Before Exporting"):**
+  - **Pre-Export Audit Checklist:** Displays calibrated dimensions, infill, material density, total grams, meters, time, and unit production cost before exporting.
+  - **1-Click Export Actions:**
+    - **Export .STL (Binary):** Instant download of calibrated 3D printable binary mesh.
+    - **Export Bambu .3MF:** Direct download of Bambu Studio and OrcaSlicer project with tuned infill and layer profiles.
+    - **Download Specs (.txt):** Instant download of comprehensive manufacturing specification sheet with complete geometry, infill, time, and cost breakdown.
+    - **Copy Estimation Summary:** 1-click clipboard copy of formatted quotation and material metrics for teammates or Etsy listings.
 - **Physical Printability & Structural Pre-Flight Check:**
-  - **Downside Face Normal Analysis:** Scans 3D mesh triangles for steep downward overhang angles ($>45^\circ$). Warns when underside overhangs lack slicer supports.
-  - **Thin Wall Detection:** Validates physical wall thickness against standard $0.4\text{mm}$ nozzle perimeters ($<0.8\text{mm}$ critical delamination risk; $<1.2\text{mm}$ fragility warning).
-  - **Aspect Ratio & Bed Adhesion:** Flags tall, slender parts ($>2.8:1$ height-to-width ratio) prone to print-bed detachment or upper-layer wobbling.
-  - **Interactive Warning Toast Notification:** Pops up on detected structural risks with severity indicators (Critical / Warning), issue explanation, and **1-Click Auto-Fix** buttons to instantly apply safe parameters.
-- **1kg Spool Yield:** Calculates exact number of finished parts producible from a single $1\text{kg}$ ($1000\text{g}$) spool for batch planning.
+  - Scans downside face normals for steep overhangs ($>45^\circ$), checks thin wall compliance against standard $0.4\text{mm}$ nozzle perimeters, and flags slender aspect ratios.
+- **Animated Recharts Production & Cost Visualizer:**
+  - Reactive animated bar charts breaking down raw material, machine labor, energy costs, and net margin.
 
 ### 4. Version History & Cloud Checkpoints
 - **Non-Destructive History:** Stores a chronological history of every design checkpoint with exact dimensions, slicer settings, laser parameters, and Etsy metadata.

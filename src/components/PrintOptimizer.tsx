@@ -28,6 +28,13 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
+  Download,
+  Copy,
+  Check,
+  FileText,
+  Boxes,
+  Maximize2,
+  Cpu,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -47,7 +54,7 @@ import {
   ModelDimensions,
   BambuLabSettings,
 } from '../types/cad';
-import { calculatePrintStats } from '../utils/stlExporter';
+import { calculatePrintStats, downloadSpecificationSheet } from '../utils/stlExporter';
 import { analyzePrintability, PrintabilityReport, PrintabilityIssue } from '../utils/printabilityChecker';
 import { BambuLabPanel } from './BambuLabPanel';
 
@@ -203,6 +210,8 @@ interface PrintOptimizerProps {
   onChangePrintSettings: (newSettings: Partial<PrintSettings>) => void;
   onChangeDimensions?: (newDims: Partial<ModelDimensions>) => void;
   onChangeBambuSettings?: (newBambu: BambuLabSettings) => void;
+  onExportSTL?: (binary: boolean) => void;
+  onExportBambu3MF?: () => void;
 }
 
 export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
@@ -210,6 +219,8 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   onChangePrintSettings,
   onChangeDimensions,
   onChangeBambuSettings,
+  onExportSTL,
+  onExportBambu3MF,
 }) => {
   const p = design.printSettings;
   const stats = calculatePrintStats(design.dimensions, design.printSettings);
@@ -219,6 +230,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
   const [isToastDismissed, setIsToastDismissed] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
+  const [isCopiedSummary, setIsCopiedSummary] = useState(false);
 
   // Configurable hourly machine labor rate ($/hour) and production settings
   const [machineLaborRate, setMachineLaborRate] = useState<number>(() => {
@@ -422,6 +434,48 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
       );
     }
     return null;
+  };
+
+  const handleExportSTL = (binary: boolean) => {
+    if (onExportSTL) {
+      onExportSTL(binary);
+    }
+  };
+
+  const handleExportBambu = () => {
+    if (onExportBambu3MF) {
+      onExportBambu3MF();
+    }
+  };
+
+  const handleDownloadSpecs = () => {
+    downloadSpecificationSheet(design);
+  };
+
+  const handleCopySummary = async () => {
+    const summaryText = `ForgeCraft Studio - Slicer & Material Usage Estimate
+• Model: ${design.name}
+• Dimensions: ${design.dimensions.width}mm × ${design.dimensions.depth || design.dimensions.width}mm × ${design.dimensions.height}mm (Wall: ${design.dimensions.wallThickness || 2.0}mm)
+• Total Part Volume: ${stats.volumeCm3} cm³ (Shell: ${stats.solidShellVolumeCm3} cm³ | Infill: ${stats.infillVolumeCm3} cm³)
+• Material: ${activePreset?.name || p.material} (${stats.density} g/cm³)
+• Infill: ${p.infillDensity}% (${p.infillPattern}) | Walls: ${p.wallCount}x | Layer: ${p.layerHeight}mm
+• Estimated Weight: ${stats.weightGrams}g (Batch ${batchQuantity}x: ${(stats.weightGrams * batchQuantity).toFixed(1)}g)
+• 1.75mm Filament Length: ~${stats.filamentLengthMeters}m (Batch ${batchQuantity}x: ${(stats.filamentLengthMeters * batchQuantity).toFixed(1)}m)
+• Estimated Print Time: ${Math.floor(stats.printTimeHours)}h ${Math.round((stats.printTimeHours % 1) * 60)}m (${stats.layerCount} layers)
+• Spool Yield: ~${stats.partsPerSpool} pcs/kg (${((stats.weightGrams / 1000) * 100).toFixed(1)}% of 1kg spool)
+• Material Cost: $${unitMaterialCost.toFixed(2)} (@ $${filamentCostPerKg}/kg)
+• Total Production Cost: $${unitProductionCost.toFixed(2)} / unit ($${batchTotalProductionCost.toFixed(2)} batch)
+• Target Retail: $${unitTargetRetail.toFixed(2)} (Profit: +$${unitNetProfit.toFixed(2)}, ${profitMarginPercent}% margin)`;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(summaryText);
+        setIsCopiedSummary(true);
+        setTimeout(() => setIsCopiedSummary(false), 2200);
+      }
+    } catch (err) {
+      console.error('Failed to copy summary:', err);
+    }
   };
 
   const primaryIssue = printability.issues[0];
@@ -725,172 +779,10 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
         )}
       </div>
 
-      {/* DEDICATED MATERIAL WEIGHT ESTIMATOR */}
-      <div className="p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/30 rounded-2xl border border-indigo-500/30 shadow-lg space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30">
-              <Scale className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>Material Weight Estimator</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80">
-                  {activePreset?.shortName || p.material} ({stats.density} g/cm³)
-                </span>
-              </h4>
-              <p className="text-[10px] text-slate-400">
-                Calculated from dimensions, wall shells, infill density & material density
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowFormulaDetails(!showFormulaDetails)}
-            className="text-[11px] text-indigo-300 hover:text-indigo-200 flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 hover:bg-slate-800 rounded-lg border border-slate-700 transition"
-          >
-            <Info className="w-3 h-3" />
-            <span>{showFormulaDetails ? 'Hide Formula' : 'Formula'}</span>
-          </button>
-        </div>
-
-        {/* Primary Weight Card */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 bg-slate-900/90 rounded-xl border border-indigo-500/40 relative overflow-hidden">
-            <span className="text-[11px] text-slate-400 block font-medium">Estimated Part Weight</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">
-                {currentWeight}
-              </span>
-              <span className="text-xs text-indigo-400 font-mono font-bold">grams</span>
-            </div>
-            <span className="text-[10px] text-slate-400 block mt-1">
-              Total volume: {stats.volumeCm3} cm³
-            </span>
-          </div>
-
-          <div className="p-3.5 bg-slate-900/70 rounded-xl border border-slate-800">
-            <span className="text-[11px] text-slate-400 block font-medium">Solid Perimeter Shell</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-xl font-bold text-slate-200 font-mono">
-                {Number((stats.solidShellVolumeCm3 * stats.density).toFixed(1))}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">grams</span>
-            </div>
-            <span className="text-[10px] text-slate-400 block mt-1">
-              {stats.solidShellVolumeCm3} cm³ ({p.wallCount} perimeter loops)
-            </span>
-          </div>
-
-          <div className="p-3.5 bg-slate-900/70 rounded-xl border border-slate-800">
-            <span className="text-[11px] text-slate-400 block font-medium">Internal Infill</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-xl font-bold text-slate-200 font-mono">
-                {Number((stats.infillVolumeCm3 * stats.density).toFixed(1))}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">grams</span>
-            </div>
-            <span className="text-[10px] text-slate-400 block mt-1">
-              {stats.infillVolumeCm3} cm³ ({p.infillDensity}% {p.infillPattern})
-            </span>
-          </div>
-        </div>
-
-        {/* Material Density Benchmark Comparison Table */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-            <span>Material Density Comparison</span>
-            <span className="text-[10px] text-indigo-400 font-mono">Click to Switch Active Material</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-            {materials.map((mat) => {
-              const weightForMat = stats.materialWeights[mat.id as keyof typeof stats.materialWeights];
-              const isSelected = p.material === mat.id;
-              const plaWeight = stats.materialWeights.PLA;
-              const diffPercent = (((weightForMat - plaWeight) / plaWeight) * 100).toFixed(1);
-              const isDiffZero = Math.abs(Number(diffPercent)) < 0.1;
-
-              return (
-                <button
-                  key={mat.id}
-                  onClick={() => onChangePrintSettings({ material: mat.id, materialPreset: mat.id, materialDensity: mat.density })}
-                  className={`p-2.5 rounded-xl text-left border transition relative ${
-                    isSelected
-                      ? 'bg-indigo-600/20 border-indigo-400 ring-1 ring-indigo-400/50'
-                      : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-bold ${mat.color}`}>
-                      {mat.id}
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {mat.density}g/cm³
-                    </span>
-                  </div>
-
-                  <div className="text-sm font-black font-mono text-slate-100 mt-1">
-                    {weightForMat}g
-                  </div>
-
-                  <div className="flex items-center justify-between text-[9px] mt-1 text-slate-400">
-                    <span>vs PLA:</span>
-                    <span
-                      className={`font-mono font-medium ${
-                        isSelected
-                          ? 'text-indigo-300'
-                          : Number(diffPercent) > 0
-                          ? 'text-amber-400'
-                          : Number(diffPercent) < 0
-                          ? 'text-emerald-400'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {isSelected
-                        ? 'Active'
-                        : isDiffZero
-                        ? '0.0%'
-                        : Number(diffPercent) > 0
-                        ? `+${diffPercent}%`
-                        : `${diffPercent}%`}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Detailed Mathematical Formula Drawer */}
-        {showFormulaDetails && (
-          <div className="p-3.5 bg-slate-950 rounded-xl border border-indigo-900/50 text-[11px] text-slate-300 space-y-2 font-mono leading-relaxed">
-            <div className="text-indigo-400 font-bold">
-              Weight Calculation Formula:
-            </div>
-            <div>
-              1. Bounding Box: {design.dimensions.width}mm × {design.dimensions.depth || design.dimensions.width}mm × {design.dimensions.height}mm = {((design.dimensions.width * (design.dimensions.depth || design.dimensions.width) * design.dimensions.height) / 1000).toFixed(1)} cm³
-            </div>
-            <div>
-              2. Shell Volume: {stats.solidShellVolumeCm3} cm³ (perimeters: {p.wallCount}x, top: {p.topLayers}x, bottom: {p.bottomLayers}x)
-            </div>
-            <div>
-              3. Infill Volume: {stats.infillVolumeCm3} cm³ ({p.infillDensity}% {p.infillPattern})
-            </div>
-            <div>
-              4. Total Volume: {stats.solidShellVolumeCm3} + {stats.infillVolumeCm3} = {stats.volumeCm3} cm³
-            </div>
-            <div className="text-emerald-400 font-bold">
-              5. Final Weight: {stats.volumeCm3} cm³ × {stats.density} g/cm³ ({p.material}) = {stats.weightGrams} grams
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* PRINT COST CALCULATOR (Material Weight × Price/kg + Hourly Machine Labor) */}
-      <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-emerald-500/30 shadow-xl space-y-4 relative overflow-hidden">
+      {/* FILAMENT WEIGHT & COST ESTIMATION CALCULATOR */}
+      <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/40 rounded-2xl border border-emerald-500/40 shadow-xl space-y-4 relative overflow-hidden">
         {/* Glow accent */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* Section Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
@@ -901,34 +793,215 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-bold text-slate-100">
-                  Print Cost Calculator
+                  Filament Weight &amp; Cost Estimation Calculator
                 </h4>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/80 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Dynamic Cost Engine
+                  Pre-Export Estimation Engine
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Calculates production cost multiplying estimated weight by user filament price and adding configurable machine labor rate.
+                Estimates total filament weight, 1.75mm length, print duration, and production costs from current model dimensions ({design.dimensions.width}&times;{design.dimensions.depth || design.dimensions.width}&times;{design.dimensions.height}mm) and infill settings ({p.infillDensity}% {p.infillPattern}) before exporting.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px]">
-            <span className="text-slate-400 px-1.5 font-medium">Batch:</span>
-            {[1, 5, 10, 25, 50].map((q) => (
-              <button
-                key={q}
-                onClick={() => setBatchQuantity(q)}
-                className={`px-2 py-0.5 rounded-lg font-mono font-bold transition ${
-                  batchQuantity === q
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {q}x
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFormulaDetails(!showFormulaDetails)}
+              className="text-[11px] text-indigo-300 hover:text-indigo-200 flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 hover:bg-slate-800 rounded-lg border border-slate-700 transition"
+              title="Show mathematical volume and weight equations"
+            >
+              <Info className="w-3.5 h-3.5" />
+              <span>{showFormulaDetails ? 'Hide Formula' : 'Formula'}</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px]">
+              <span className="text-slate-400 px-1.5 font-medium">Batch:</span>
+              {[1, 5, 10, 25, 50].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setBatchQuantity(q)}
+                  className={`px-2 py-0.5 rounded-lg font-mono font-bold transition ${
+                    batchQuantity === q
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {q}x
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* DRIVER PARAMETERS BAR: DIMENSIONS & INFILL SETTINGS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* Panel 1: Current Dimensions & Volume */}
+          <div className="p-3.5 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Maximize2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Current Dimensions &amp; Geometry</span>
+              </span>
+              <span className="text-[10px] text-blue-300 font-mono font-semibold bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/80">
+                {stats.volumeCm3} cm³ Net Volume
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-medium">Width (X)</span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="font-mono font-bold text-slate-100">{design.dimensions.width} mm</span>
+                  {onChangeDimensions && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onChangeDimensions({ width: Math.max(10, design.dimensions.width - 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="-5mm"
+                      >
+                        -
+                      </button>
+                      <button
+                        onClick={() => onChangeDimensions({ width: Math.min(300, design.dimensions.width + 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="+5mm"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-medium">Depth (Y)</span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="font-mono font-bold text-slate-100">{design.dimensions.depth || design.dimensions.width} mm</span>
+                  {onChangeDimensions && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onChangeDimensions({ depth: Math.max(10, (design.dimensions.depth || design.dimensions.width) - 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="-5mm"
+                      >
+                        -
+                      </button>
+                      <button
+                        onClick={() => onChangeDimensions({ depth: Math.min(300, (design.dimensions.depth || design.dimensions.width) + 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="+5mm"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-medium">Height (Z)</span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="font-mono font-bold text-slate-100">{design.dimensions.height} mm</span>
+                  {onChangeDimensions && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onChangeDimensions({ height: Math.max(5, design.dimensions.height - 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="-5mm"
+                      >
+                        -
+                      </button>
+                      <button
+                        onClick={() => onChangeDimensions({ height: Math.min(300, design.dimensions.height + 5) })}
+                        className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold"
+                        title="+5mm"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+              <span>Bounding Box: {((design.dimensions.width * (design.dimensions.depth || design.dimensions.width) * design.dimensions.height) / 1000).toFixed(1)} cm³</span>
+              <span className="text-slate-300">Wall: <strong className="text-slate-100 font-mono">{design.dimensions.wallThickness || 2.0}mm</strong></span>
+              <span className="text-blue-400">Solid Shell: {stats.solidShellVolumeCm3} cm³</span>
+            </div>
+          </div>
+
+          {/* Panel 2: Infill & Shell Settings */}
+          <div className="p-3.5 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Infill Density &amp; Pattern</span>
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/80">
+                {p.infillDensity}% {p.infillPattern}
+              </span>
+            </div>
+
+            {/* Slider with interactive range */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>Infill Fill Ratio</span>
+                <span className="font-mono text-slate-200 font-semibold">{p.infillDensity}% ({stats.infillVolumeCm3} cm³ infill volume)</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={p.infillDensity}
+                onChange={(e) => onChangePrintSettings({ infillDensity: Number(e.target.value) })}
+                className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            {/* Quick Infill Preset Chips */}
+            <div className="flex items-center justify-between gap-1 pt-1">
+              {[
+                { val: 0, label: '0% Hollow' },
+                { val: 15, label: '15% Eco' },
+                { val: 20, label: '20% Std' },
+                { val: 40, label: '40% Heavy' },
+                { val: 100, label: '100% Solid' },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  onClick={() => onChangePrintSettings({ infillDensity: preset.val })}
+                  className={`flex-1 py-1 rounded text-[10px] font-mono transition border ${
+                    p.infillDensity === preset.val
+                      ? 'bg-emerald-600 text-white border-emerald-400 font-bold'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Infill Pattern Buttons */}
+            <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-800/80">
+              {infillPatterns.map((ip) => (
+                <button
+                  key={ip.id}
+                  onClick={() => onChangePrintSettings({ infillPattern: ip.id })}
+                  className={`py-1 px-1.5 rounded-lg text-center border transition ${
+                    p.infillPattern === ip.id
+                      ? 'bg-emerald-600/20 border-emerald-400 text-emerald-200 font-bold'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                  title={ip.badge}
+                >
+                  <div className="text-[10px] font-semibold">{ip.name}</div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -976,7 +1049,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <div className="flex items-center justify-between">
                 <label htmlFor="material-preset-select" className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Material Preset & Density</span>
+                  <span>Material Preset &amp; Density</span>
                 </label>
                 <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800/80">
                   {stats.density} g/cm³
@@ -1112,7 +1185,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[9px] text-slate-400 flex items-center justify-between">
                 <span>1 Unit Raw Material:</span>
                 <span className="font-mono font-bold text-blue-300">
-                  {stats.weightGrams}g × ${(filamentCostPerKg / 1000).toFixed(4)} = ${unitMaterialCost.toFixed(2)}
+                  {stats.weightGrams}g &times; ${(filamentCostPerKg / 1000).toFixed(4)} = ${unitMaterialCost.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -1184,7 +1257,7 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
               <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[9px] text-slate-400 flex items-center justify-between">
                 <span>1 Unit Machine Labor:</span>
                 <span className="font-mono font-bold text-indigo-300">
-                  {stats.printTimeHours}h × ${machineLaborRate.toFixed(2)} = ${unitMachineLaborCost.toFixed(2)}
+                  {stats.printTimeHours}h &times; ${machineLaborRate.toFixed(2)} = ${unitMachineLaborCost.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -1225,58 +1298,103 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
           </div>
         </div>
 
-        {/* 4 Dynamic Result Tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-          {/* Tile 1: Material Cost */}
-          <div className="p-3 bg-slate-950/70 rounded-xl border border-blue-900/40">
-            <span className="text-[10px] text-blue-400 font-bold flex items-center gap-1 uppercase tracking-wider">
-              <Weight className="w-3 h-3" /> Material Cost
-            </span>
-            <div className="text-lg font-black text-slate-100 font-mono mt-1">
-              ${batchMaterialCost.toFixed(2)}
+        {/* 4 CORE ESTIMATION RESULT TILES */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {/* Tile 1: Total Filament Weight & Length */}
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-blue-900/40 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-blue-400 font-bold flex items-center gap-1 uppercase tracking-wider">
+                <Weight className="w-3 h-3" /> Filament Usage
+              </span>
+              <span className="text-[10px] text-blue-300 font-mono font-semibold bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-800/60">
+                1.75mm Standard
+              </span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              ${unitMaterialCost.toFixed(2)} / unit ({(stats.weightGrams * qty).toFixed(1)}g total)
+            <div className="flex items-baseline gap-1 mt-1.5">
+              <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">
+                {stats.weightGrams}
+              </span>
+              <span className="text-xs text-blue-400 font-mono font-bold">grams</span>
+              {qty > 1 && (
+                <span className="text-[11px] text-slate-400 font-mono ml-auto">
+                  ({(stats.weightGrams * qty).toFixed(1)}g batch)
+                </span>
+              )}
             </div>
-            <span className="text-[9px] text-blue-300/80 font-mono block mt-1">
-              Density: {stats.density} g/cm³ ({activePreset?.shortName || p.material})
-            </span>
+            <div className="text-[11px] text-slate-300 font-medium mt-1 flex items-center gap-1">
+              <span>Length:</span>
+              <strong className="text-blue-300 font-mono">~{stats.filamentLengthMeters} meters</strong>
+              {qty > 1 && <span className="text-slate-400 text-[10px]">({(stats.filamentLengthMeters * qty).toFixed(1)}m total)</span>}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Spool Yield: ~{stats.partsPerSpool} pcs/kg</span>
+              <span className="text-blue-400 font-mono">{((stats.weightGrams / 1000) * 100).toFixed(1)}% spool</span>
+            </div>
           </div>
 
-          {/* Tile 2: Machine Labor Cost */}
-          <div className="p-3 bg-slate-950/70 rounded-xl border border-indigo-900/40">
-            <span className="text-[10px] text-indigo-400 font-bold flex items-center gap-1 uppercase tracking-wider">
-              <Clock className="w-3 h-3" /> Machine Labor
-            </span>
-            <div className="text-lg font-black text-slate-100 font-mono mt-1">
-              ${batchLaborCost.toFixed(2)}
+          {/* Tile 2: Estimated Print Time */}
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-indigo-900/40">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-indigo-400 font-bold flex items-center gap-1 uppercase tracking-wider">
+                <Clock className="w-3 h-3" /> Estimated Print Time
+              </span>
+              <span className="text-[10px] text-indigo-300 font-mono font-semibold bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-800/60">
+                CoreXY ~12mm³/s
+              </span>
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              ${unitMachineLaborCost.toFixed(2)} / unit ({(stats.printTimeHours * qty).toFixed(1)} hrs)
+            <div className="flex items-baseline gap-1 mt-1.5">
+              <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">
+                {Math.floor(stats.printTimeHours)}h {Math.round((stats.printTimeHours % 1) * 60)}m
+              </span>
+              {qty > 1 && (
+                <span className="text-[11px] text-slate-400 font-mono ml-auto">
+                  ({Math.floor(stats.printTimeHours * qty)}h {Math.round(((stats.printTimeHours * qty) % 1) * 60)}m)
+                </span>
+              )}
             </div>
-            <span className="text-[9px] text-indigo-300/80 font-mono block mt-1">
-              Rate: ${machineLaborRate.toFixed(2)}/hr
-            </span>
+            <div className="text-[11px] text-slate-300 font-medium mt-1 flex items-center justify-between">
+              <span>Resolution: {p.layerHeight} mm</span>
+              <strong className="text-indigo-300 font-mono">{stats.layerCount} layers</strong>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Bed Prep: ~3 mins</span>
+              <span className="text-indigo-400 font-mono">Rate: ${machineLaborRate.toFixed(2)}/hr</span>
+            </div>
           </div>
 
           {/* Tile 3: Total Production Cost (COGS) */}
-          <div className="p-3 bg-gradient-to-br from-emerald-950/40 to-slate-950 rounded-xl border border-emerald-500/40 shadow-sm">
-            <span className="text-[10px] text-emerald-400 font-black flex items-center gap-1 uppercase tracking-wider">
-              <DollarSign className="w-3 h-3" /> Total Production Cost
-            </span>
-            <div className="text-lg font-black text-emerald-300 font-mono mt-1">
-              ${batchTotalProductionCost.toFixed(2)}
+          <div className="p-3.5 bg-gradient-to-br from-emerald-950/40 to-slate-950 rounded-xl border border-emerald-500/40 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-emerald-400 font-black flex items-center gap-1 uppercase tracking-wider">
+                <DollarSign className="w-3 h-3" /> Production Cost
+              </span>
+              <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/80">
+                COGS
+              </span>
             </div>
-            <div className="text-[10px] text-slate-300 mt-0.5 font-bold">
-              ${unitProductionCost.toFixed(2)} / unit
+            <div className="flex items-baseline gap-1 mt-1.5">
+              <span className="text-2xl font-black text-emerald-300 font-mono tracking-tight">
+                ${unitProductionCost.toFixed(2)}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">/ unit</span>
+              {qty > 1 && (
+                <span className="text-[11px] text-emerald-400 font-mono ml-auto font-bold">
+                  (${batchTotalProductionCost.toFixed(2)} batch)
+                </span>
+              )}
             </div>
-            <span className="text-[9px] text-emerald-400/80 font-mono block mt-1">
-              {qty} piece{qty > 1 ? 's' : ''} batch
-            </span>
+            <div className="text-[11px] text-slate-300 font-medium mt-1 flex items-center justify-between">
+              <span>Filament: ${unitMaterialCost.toFixed(2)}</span>
+              <span>Labor: ${unitMachineLaborCost.toFixed(2)}</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>Power: ${unitPowerCost.toFixed(2)}</span>
+              <span className="text-emerald-400 font-mono">{qty}x quantity</span>
+            </div>
           </div>
 
           {/* Tile 4: Retail & Profit Target */}
-          <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800">
+          <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                 Retail Target
@@ -1297,15 +1415,153 @@ export const PrintOptimizer: React.FC<PrintOptimizerProps> = ({
                 ))}
               </div>
             </div>
-            <div className="text-lg font-black text-slate-100 font-mono mt-1">
-              ${(unitTargetRetail * qty).toFixed(2)}
+            <div className="flex items-baseline gap-1 mt-1.5">
+              <span className="text-2xl font-black text-slate-100 font-mono tracking-tight">
+                ${unitTargetRetail.toFixed(2)}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">/ unit</span>
+              {qty > 1 && (
+                <span className="text-[11px] text-slate-400 font-mono ml-auto">
+                  (${(unitTargetRetail * qty).toFixed(2)} batch)
+                </span>
+              )}
             </div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-              +${(unitNetProfit * qty).toFixed(2)} Net Profit
+            <div className="text-[11px] text-emerald-400 font-semibold mt-1 flex items-center justify-between">
+              <span>+${unitNetProfit.toFixed(2)} Net Profit</span>
+              <span className="font-mono">{profitMarginPercent}% Margin</span>
             </div>
-            <span className="text-[9px] text-slate-400 font-mono block mt-1">
-              {profitMarginPercent}% Net Margin
-            </span>
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between pt-1 border-t border-slate-800/80">
+              <span>{targetMarkupMultiplier}x Markup</span>
+              <span className="text-emerald-400 font-mono">+${(unitNetProfit * qty).toFixed(2)} batch</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Mathematical Formula Drawer (Collapsible) */}
+        {showFormulaDetails && (
+          <div className="p-3.5 bg-slate-950 rounded-xl border border-indigo-900/50 text-[11px] text-slate-300 space-y-2 font-mono leading-relaxed animate-fadeIn">
+            <div className="text-indigo-400 font-bold flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5" />
+              <span>Slicer Estimation Mathematical Equations &amp; Material Derivations:</span>
+            </div>
+            <div>
+              1. Bounding Box: {design.dimensions.width}mm &times; {design.dimensions.depth || design.dimensions.width}mm &times; {design.dimensions.height}mm = {((design.dimensions.width * (design.dimensions.depth || design.dimensions.width) * design.dimensions.height) / 1000).toFixed(1)} cm³
+            </div>
+            <div>
+              2. Shell Volume: {stats.solidShellVolumeCm3} cm³ ({p.wallCount} perimeter loops, {design.dimensions.wallThickness || 2.0}mm wall thickness)
+            </div>
+            <div>
+              3. Infill Volume: {stats.infillVolumeCm3} cm³ ({p.infillDensity}% infill ratio, {p.infillPattern} pattern)
+            </div>
+            <div>
+              4. Total Part Volume: {stats.solidShellVolumeCm3} + {stats.infillVolumeCm3} = {stats.volumeCm3} cm³
+            </div>
+            <div className="text-blue-400">
+              5. 1.75mm Filament Length: {stats.volumeCm3} cm³ &divide; (π &times; 0.0875² cm² &times; 100) = ~{stats.filamentLengthMeters} meters
+            </div>
+            <div className="text-emerald-400 font-bold">
+              6. Final Weight: {stats.volumeCm3} cm³ &times; {stats.density} g/cm³ ({activePreset?.shortName || p.material}) = {stats.weightGrams} grams
+            </div>
+            <div>
+              7. Production Cost: ({stats.weightGrams}g &divide; 1000 &times; ${filamentCostPerKg}/kg) + ({stats.printTimeHours}h &times; ${machineLaborRate.toFixed(2)}/hr) + ${unitPowerCost.toFixed(2)} = ${unitProductionCost.toFixed(2)}
+            </div>
+          </div>
+        )}
+
+        {/* PRE-EXPORT ESTIMATION & 1-CLICK EXPORT HUB ("BEFORE EXPORTING") */}
+        <div className="p-4 bg-slate-950/90 rounded-xl border border-emerald-500/30 shadow-lg space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                  <span>Pre-Export Estimation Audit</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    Calculated &amp; Ready for Export
+                  </span>
+                </h5>
+                <p className="text-[10px] text-slate-400">
+                  Verify material usage, print time, and costs before exporting manufacturing files or sharing specs.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Audit Badges */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                📐 {design.dimensions.width}&times;{design.dimensions.depth || design.dimensions.width}&times;{design.dimensions.height}mm
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                🧱 {p.infillDensity}% {p.infillPattern} ({p.wallCount}x)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-blue-950/70 border border-blue-800/70 text-blue-300">
+                ⚖️ {stats.weightGrams}g ({stats.filamentLengthMeters}m)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-indigo-950/70 border border-indigo-800/70 text-indigo-300">
+                ⏱️ {Math.floor(stats.printTimeHours)}h {Math.round((stats.printTimeHours % 1) * 60)}m
+              </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/70 text-emerald-300 font-bold">
+                💰 ${unitProductionCost.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Export Buttons directly inside Slicer Calculator */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-800/80">
+            {/* 1. Export Binary STL */}
+            <button
+              onClick={() => handleExportSTL(true)}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md transition flex items-center justify-center gap-1.5 group"
+              title="Export high-resolution Binary .STL calibrated to current dimensions and slicer parameters"
+            >
+              <Download className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+              <span>Export .STL</span>
+            </button>
+
+            {/* 2. Export Bambu Studio 3MF */}
+            <button
+              onClick={handleExportBambu}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md transition flex items-center justify-center gap-1.5 group"
+              title="Export Bambu Studio / OrcaSlicer project with pre-configured infill and layer profiles"
+            >
+              <Boxes className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+              <span>Export Bambu .3MF</span>
+            </button>
+
+            {/* 3. Download Spec Sheet (.txt) */}
+            <button
+              onClick={handleDownloadSpecs}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              title="Download human-readable manufacturing specification sheet with complete weight, infill, and cost breakdown"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
+              <span>Download Specs (.txt)</span>
+            </button>
+
+            {/* 4. Copy Estimation Summary */}
+            <button
+              onClick={handleCopySummary}
+              className={`px-3 py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5 ${
+                isCopiedSummary
+                  ? 'bg-emerald-950 border-emerald-500 text-emerald-300 font-bold'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+              }`}
+              title="Copy formatted estimation summary to clipboard for remote teams or Etsy listings"
+            >
+              {isCopiedSummary ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Copied Summary!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Copy Estimation</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

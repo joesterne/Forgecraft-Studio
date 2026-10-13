@@ -462,12 +462,17 @@ export function calculatePrintStats(dimensions: ModelDimensions, printSettings: 
   const netProfit = Number((recommendedRetailPrice - totalCogs - etsyFee).toFixed(2));
   const profitMargin = Math.round((netProfit / recommendedRetailPrice) * 100);
 
+  // 1.75mm standard filament length in meters:
+  // Volume in cm3 / cross-section area in cm2 (pi * 0.0875^2 = 0.0240528) / 100 cm/m = Volume / 2.40528
+  const filamentLengthMeters = Number((totalVolumeCm3 / 2.40528).toFixed(2));
+
   return {
     volumeCm3: Number(totalVolumeCm3.toFixed(1)),
     solidShellVolumeCm3: Number(solidShellVolume.toFixed(1)),
     infillVolumeCm3: Number(infillVolume.toFixed(1)),
     density,
     weightGrams,
+    filamentLengthMeters,
     materialWeights,
     partsPerSpool,
     layerCount,
@@ -483,6 +488,66 @@ export function calculatePrintStats(dimensions: ModelDimensions, printSettings: 
     netProfit,
     profitMargin,
   };
+}
+
+/**
+ * Generates a comprehensive human-readable manufacturing and slicer specification sheet
+ * including dimensions, infill, filament weight, length, print time, and cost breakdowns.
+ */
+export function generateSpecificationText(design: CADDesign): string {
+  const stats = calculatePrintStats(design.dimensions, design.printSettings);
+  return `=====================================================
+FORGECRAFT STUDIO - MANUFACTURING & SLICER SPEC SHEET
+=====================================================
+Design Name: ${design.name}
+Category: ${design.category}
+Model Type: ${design.modelType}
+Date Exported: ${new Date().toISOString()}
+
+[1] PHYSICAL DIMENSIONS & BOUNDING BOX
+- Width (X): ${design.dimensions.width} mm
+- Depth (Y): ${design.dimensions.depth || design.dimensions.width} mm
+- Height (Z): ${design.dimensions.height} mm
+- Wall Thickness: ${design.dimensions.wallThickness || 2.0} mm
+- Bounding Box Volume: ${((design.dimensions.width * (design.dimensions.depth || design.dimensions.width) * design.dimensions.height) / 1000).toFixed(1)} cm³
+- Estimated Part Volume: ${stats.volumeCm3} cm³ (Solid Shell: ${stats.solidShellVolumeCm3} cm³ | Infill: ${stats.infillVolumeCm3} cm³)
+${design.dimensions.cornerRadius ? `- Corner Radius: ${design.dimensions.cornerRadius} mm\n` : ''}${design.dimensions.drainageHole ? `- Drainage Hole: ${design.dimensions.drainageHole} mm\n` : ''}${design.dimensions.holeDiameter ? `- Ring/Hole Diameter: ${design.dimensions.holeDiameter} mm\n` : ''}${design.dimensions.text ? `- Custom Text: "${design.dimensions.text}"\n` : ''}
+[2] 3D PRINTING SLICER & FILAMENT ESTIMATION
+- Material: ${design.printSettings.material} (Density: ${stats.density} g/cm³)
+- Estimated Part Weight: ${stats.weightGrams} grams
+- 1.75mm Filament Length: ~${stats.filamentLengthMeters} meters
+- Spool Yield (1kg Spool): ~${stats.partsPerSpool} pieces (${((stats.weightGrams / 1000) * 100).toFixed(1)}% of spool)
+- Layer Resolution: ${design.printSettings.layerHeight} mm (${stats.layerCount} layers)
+- Infill Density & Pattern: ${design.printSettings.infillDensity}% (${design.printSettings.infillPattern})
+- Wall Shell Perimeters: ${design.printSettings.wallCount}x
+- Estimated Print Time: ${Math.floor(stats.printTimeHours)}h ${Math.round((stats.printTimeHours % 1) * 60)}m
+- Estimated Raw Material Cost: $${stats.materialCost} (@ $${design.printSettings.filamentCostPerKg || 20}/kg)
+- Supports Needed: ${design.printSettings.supportsNeeded ? 'Yes' : 'No (Designed Supportless)'}
+
+[3] PRODUCTION ECONOMICS & BENCHMARK
+- Total Production COGS: $${stats.totalCogs} (Material + Electricity + Packaging)
+- Recommended Retail Price: $${stats.recommendedRetailPrice}
+- Estimated Net Profit: $${stats.netProfit} (${stats.profitMargin}% margin)
+
+[4] LASER VECTOR CUTTING & ENGRAVING
+- Recommended Material: ${design.laserSettings?.material || '3mm Baltic Birch / Basswood'}
+- Laser Machine Profile: ${design.laserSettings?.laserType || 'Diode 20W'}
+- Kerf Beam Offset: ${design.laserSettings?.kerfCompensation || 0.15} mm
+- Color Code Layers:
+    * RED (#FF0000)   : Through-Cut Vector
+    * BLUE (#0000FF)  : Surface Score Vector
+    * BLACK (#000000) : High-Res Raster Engraving
+`;
+}
+
+/**
+ * Triggers a direct browser text file download of the full slicer and manufacturing spec sheet.
+ */
+export function downloadSpecificationSheet(design: CADDesign) {
+  const text = generateSpecificationText(design);
+  const cleanName = (design.name || 'design').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  downloadFile(blob, `${cleanName}_slicer_specs.txt`);
 }
 
 /**

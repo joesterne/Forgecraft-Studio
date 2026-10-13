@@ -1213,6 +1213,8 @@ export default function App() {
                 onChangePrintSettings={handlePrintSettingsChange}
                 onChangeDimensions={handleDimensionsChange}
                 onChangeBambuSettings={handleBambuSettingsChange}
+                onExportSTL={handleExportSTL}
+                onExportBambu3MF={handleExportBambu3MF}
               />
             )}
 
